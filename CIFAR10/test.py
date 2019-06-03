@@ -11,7 +11,7 @@ import torchvision.transforms as transforms
 import torch.optim as optim
 import torch.nn as nn
 import time
-sys.path.append('../cifar10-fast/')
+sys.path.append('./utils/')
 from core import *
 from torch_backend import *
 from cifar_funcs import *
