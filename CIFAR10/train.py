@@ -1,7 +1,7 @@
 import sys
 sys.path.append('./models/')
 import torch
-from models import ResNet18, PreActResNet18, HalfspaceResNet18
+from models import PreActResNet18
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
