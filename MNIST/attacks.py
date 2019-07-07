@@ -10,7 +10,7 @@ import torchvision
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
-from my_funcs import *
+from mnist_funcs import *
 import time
 
 class Flatten(nn.Module):
@@ -92,9 +92,9 @@ def test_model(model_name, max_tests,f):
     #     GE = foolbox.gradient_estimators.CoordinateWiseGradientEstimator(0.1)
     #     fmodel = foolbox.models.ModelWithEstimatedGradients(fmodel, GE)
 
-    attacks_list = ['PGD']
+    attacks_list = ['PA']
     # attacks_list = ['SAPA','PA','IGD','AGNA','BA','DeepFool','PAL2','FGSM','IFGSM','PGD','IGM']
-    types_list   = [ 3  ]#  ,  2      , 2    , 3]
+    types_list   = [ 0  ]#  ,  2      , 2    , 3]
     # types_list   = [ 0    , 0  , 2   , 2    , 2  ,  2      , 2    , 3    , 3     , 3   , 3   ]
     # attacks_list = ['SAPA']#,'PA','IGD','AGNA','BA','DeepFool','PAL2','FGSM','IFGSM','PGD','IGM']
     for i in range(len(attacks_list)):
@@ -126,11 +126,6 @@ def test_model(model_name, max_tests,f):
             if (label != pred_label):
                 err+=1
             adv = torch.from_numpy(adversarial)
-            # linf_d = torch.abs(X - adv).max().item()
-            # l2_d  = norms(X - adv).item()
-            # l1_d = norms_l1(X - adv).item()
-            # l0_d = norms_l0(X - adv).item()
-            # print(total," Label = ", label, " Pred = ", pred_label, " lo_d = ", l0_d, " linf_d = ", linf_d, " l2_d = ", l2_d, " l1_d = ", l1_d)
             if (types == 0):
                 file.write(str(norms_l0(X - adv).item()) + "\n")
             elif (types == 2):
@@ -149,7 +144,8 @@ device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 import sys
 args = sys.argv
 f = args[1]
-test_model("NN/9March/1_1_1_random_2_extend_new_iter_6", 10000,f)
+# test_model("NN/9March/1_1_1_random_2_extend_new_iter_6", 10000,f)
+test_model("Models/pgd_all_iter_14", 10,f)
 # test_model("NN/April/8th/rand_0.04_alphas_[0.2, 0.25, 0.05]_iter_7", 1000,f)
 # test_model("NN/Naive/all_out_iter_5", 10000,f)
 print ("Time Taken = ", time.time() - start)

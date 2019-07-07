@@ -31,31 +31,31 @@ def norms_l0(Z):
 
 
 def pgd_all_out(model, X,y, epsilon_l_inf = 0.3, epsilon_l_2= 1.5, epsilon_l_1 = 12, alpha_l_inf = 0.01, alpha_l_2 = 0.1, alpha_l_1 = 0.1, num_iter = 100, device = "cuda:1"):
-	delta_1 = pgd_l1(model, X, y, epsilon = epsilon_l_1, alpha = alpha_l_1, num_iter = 400, device = device)
-	delta_2 = pgd_l2(model, X, y, epsilon = epsilon_l_2, alpha = alpha_l_2, num_iter = 100, device = device)
-	delta_inf = pgd_linf(model, X, y, epsilon = epsilon_l_inf, alpha = alpha_l_inf, num_iter = 40, device = device)
-	
-	batch_size = X.shape[0]
+    delta_1 = pgd_l1(model, X, y, epsilon = epsilon_l_1, alpha = alpha_l_1, num_iter = 400, device = device)
+    delta_2 = pgd_l2(model, X, y, epsilon = epsilon_l_2, alpha = alpha_l_2, num_iter = 100, device = device)
+    delta_inf = pgd_linf(model, X, y, epsilon = epsilon_l_inf, alpha = alpha_l_inf, num_iter = 40, device = device)
+    
+    batch_size = X.shape[0]
 
-	loss_1 = nn.CrossEntropyLoss(reduction = 'none')(model(X + delta_1), y)
-	loss_2 = nn.CrossEntropyLoss(reduction = 'none')(model(X + delta_2), y)
-	loss_inf = nn.CrossEntropyLoss(reduction = 'none')(model(X + delta_inf), y)
+    loss_1 = nn.CrossEntropyLoss(reduction = 'none')(model(X + delta_1), y)
+    loss_2 = nn.CrossEntropyLoss(reduction = 'none')(model(X + delta_2), y)
+    loss_inf = nn.CrossEntropyLoss(reduction = 'none')(model(X + delta_inf), y)
 
-	delta_1 = delta_1.view(batch_size,1,-1)
-	delta_2 = delta_2.view(batch_size,1,-1)
-	delta_inf = delta_inf.view(batch_size,1,-1)
+    delta_1 = delta_1.view(batch_size,1,-1)
+    delta_2 = delta_2.view(batch_size,1,-1)
+    delta_inf = delta_inf.view(batch_size,1,-1)
 
-	tensor_list = [loss_1, loss_2, loss_inf]
-	delta_list = [delta_1, delta_2, delta_inf]
-	loss_arr = torch.stack(tuple(tensor_list))
-	delta_arr = torch.stack(tuple(delta_list))
-	max_loss = loss_arr.max(dim = 0)
-	
-	# print(max_loss)
+    tensor_list = [loss_1, loss_2, loss_inf]
+    delta_list = [delta_1, delta_2, delta_inf]
+    loss_arr = torch.stack(tuple(tensor_list))
+    delta_arr = torch.stack(tuple(delta_list))
+    max_loss = loss_arr.max(dim = 0)
+    
+    # print(max_loss)
 
-	delta = delta_arr[max_loss[1], torch.arange(batch_size), 0]
-	delta = delta.view(batch_size,1, X.shape[2], X.shape[3])
-	return delta
+    delta = delta_arr[max_loss[1], torch.arange(batch_size), 0]
+    delta = delta.view(batch_size,1, X.shape[2], X.shape[3])
+    return delta
 
 def norms_linf(Z):
     # return x.abs().max()[0]
@@ -297,7 +297,7 @@ def pgd_l1_rand(model, X,y, restarts  =10, epsilon = 12, alpha = 0.1, num_iter =
     return max_delta
 
 
-def pgd_l1(model, X,y, epsilon = 12, alpha = 0.1, num_iter = 400, device = "cuda:1"):
+def pgd_l1(model, X,y, epsilon = 12, alpha = 0.1, num_iter = 100, device = "cuda:1"):
     delta = torch.zeros_like(X, requires_grad = True)
     # print ("Here")
     for t in range (num_iter):
@@ -403,65 +403,39 @@ def proj_simplex(v, s=1, device = "cuda:1"):
     return w
 
 
-
-def epoch(loader, model, epoch = 0, opt=None, device = "cuda:1"):
+def epoch(loader, lr_schedule,  model, epoch_i = 0, criterion = nn.CrossEntropyLoss(), opt=None, device = "cuda:1"):
     """Standard training/evaluation epoch over the dataset"""
-    total_loss, total_err = 0.,0.
-    for X,y in loader:
-        X,y = X.to(device), y.to(device)
+    train_loss = 0
+    train_acc = 0
+    train_n = 0
+
+    for i, batch in enumerate(loader):
+        X,y = batch[0].to(device), batch[1].to(device)
         yp = model(X)
         loss = nn.CrossEntropyLoss()(yp,y)
         if opt:
+            lr = lr_schedule(epoch_i + (i+1)/len(loader))
+            opt.param_groups[0].update(lr=lr)
             opt.zero_grad()
             loss.backward()
             opt.step()
+
+        train_loss += loss.item()*y.size(0)
+        train_acc += (yp.max(1)[1] == y).sum().item()
+        train_n += y.size(0)
         
-        total_err += (yp.max(dim=1)[1] != y).sum().item()
-        total_loss += loss.item() * X.shape[0]
-    return total_err / len(loader.dataset), total_loss / len(loader.dataset)
+    return train_loss / train_n, train_acc / train_n
 
+def epoch_adversarial(loader, lr_schedule, model, epoch_i, attack, criterion = nn.CrossEntropyLoss(), 
+                        opt=None, device = "cuda:1", stop = False, **kwargs):
 
-def epoch_adversarial_tracker(loader, model, attack, epoch = 0, opt=None, device= "cuda:1", **kwargs):
     """Adversarial training/evaluation epoch over the dataset"""
-    percentage= [0,0,0]
-    total_loss, total_err = 0.,0.
-    for X,y in loader:
-        X,y = X.to(device), y.to(device)
-        if attack == pgd_all_old:
-            delta, iter_l1, iter_l2, iter_linf = attack(model, X, y, device = device, **kwargs)
-            percentage[0]+=iter_l1
-            percentage[1]+=iter_l2
-            percentage[2]+=iter_linf
-            # ipdb.set_trace()
-        else:
-            delta = attack(model, X, y, device = device, **kwargs)
+    train_loss = 0
+    train_acc = 0
+    train_n = 0
 
-        yp = model(X+delta)
-        loss = nn.CrossEntropyLoss()(yp,y)
-        if opt:
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-        
-        total_err += (yp.max(dim=1)[1] != y).sum().item()
-        total_loss += loss.item() * X.shape[0]
-        if opt:
-            continue
-        else:
-            return total_err / X.shape[0], total_loss / X.shape[0]
-    num_iter = sum(percentage)
-    
-    if opt and (attack == pgd_all_old):
-        print ("L_1 = ", (percentage[0]/num_iter), " L_2 = ", percentage[1]/num_iter, " L_inf =", percentage[2]/num_iter )
-
-    return total_err / len(loader.dataset), total_loss / len(loader.dataset)
-
-
-def epoch_adversarial(loader, model, attack, opt=None, device= "cuda:1", **kwargs):
-    """Adversarial training/evaluation epoch over the dataset"""
-    total_loss, total_err = 0.,0.
-    for X,y in loader:
-        X,y = X.to(device), y.to(device)
+    for i, batch in enumerate(loader):
+        X,y = batch[0].to(device), batch[1].to(device)
         if attack == pgd_all_old:
             delta = attack(model, X, y, device = device, **kwargs)
             delta = delta[0]
@@ -470,13 +444,58 @@ def epoch_adversarial(loader, model, attack, opt=None, device= "cuda:1", **kwarg
         yp = model(X+delta)
         loss = nn.CrossEntropyLoss()(yp,y)
         if opt:
+            lr = lr_schedule(epoch_i + (i+1)/len(loader))
+            opt.param_groups[0].update(lr=lr)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+
+        train_loss += loss.item()*y.size(0)
+        train_acc += (yp.max(1)[1] == y).sum().item()
+        train_n += y.size(0)
+        if stop:
+            break
+        
+    return train_loss / train_n, train_acc / train_n
+
+
+def epoch_adversarial_tracker(loader, lr_schedule, model, epoch_i, attack, criterion = nn.CrossEntropyLoss(), 
+                        opt=None, device = "cuda:1", stop = False, **kwargs):
+
+    """Adversarial training/evaluation epoch over the dataset"""
+    train_loss = 0
+    train_acc = 0
+    train_n = 0
+    percentage= [0,0,0]
+    
+    for i, batch in enumerate(loader):
+        X,y = batch[0].to(device), batch[1].to(device)
+        if attack == pgd_all_old:
+            delta, iter_l1, iter_l2, iter_linf = attack(model, X, y, device = device, **kwargs)
+            percentage[0]+=iter_l1
+            percentage[1]+=iter_l2
+            percentage[2]+=iter_linf
+        else:
+            delta = attack(model, X, y, device = device, **kwargs)
+        yp = model(X+delta)
+        loss = nn.CrossEntropyLoss()(yp,y)
+        if opt:
+            lr = lr_schedule(epoch_i + (i+1)/len(loader))
+            opt.param_groups[0].update(lr=lr)
             opt.zero_grad()
             loss.backward()
             opt.step()
         
-        total_err += (yp.max(dim=1)[1] != y).sum().item()
-        total_loss += loss.item() * X.shape[0]
-    return total_err / len(loader.dataset), total_loss / len(loader.dataset)
+
+        train_loss += loss.item()*y.size(0)
+        train_acc += (yp.max(1)[1] == y).sum().item()
+        train_n += y.size(0)
+
+    num_iter = sum(percentage)
+    if (attack == pgd_all_old):
+        print ("L_1 = ", (percentage[0]/num_iter), " L_2 = ", percentage[1]/num_iter, " L_inf =", percentage[2]/num_iter )
+
+    return train_loss / train_n, train_acc / train_n
 
 def pgd_l1_fool(model, X,y, epsilon = 12, alpha = 0.1, num_iter = 400, device = "cuda:1"):
     delta = torch.zeros_like(X, requires_grad = True)
