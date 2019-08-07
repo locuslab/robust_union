@@ -13,10 +13,21 @@ import torch.nn.functional as F
 from mnist_funcs import *
 import time
 
+import sys
+args = sys.argv
+start = time.time()
+
+mnist_test = datasets.MNIST("../../data", train=False, download=True, transform=transforms.ToTensor())
+device = torch.device("cuda:{}".format(args[1]) if torch.cuda.is_available() else "cpu")
+f = args[2]
+
+
 class Flatten(nn.Module):
     def forward(self, x):
         return x.view(x.shape[0], -1)    
 
+def net():
+    return nn.Sequential(nn.Conv2d(1, 32, 5, padding = 2), nn.ReLU(), nn.MaxPool2d(2, 2), nn.Conv2d(32, 64, 5, padding = 2), nn.ReLU(), nn.MaxPool2d(2, 2), Flatten(), nn.Linear(7*7*64, 1024), nn.ReLU(), nn.Linear(1024, 10))
 
 def get_attack(attack, fmodel):
     args = []
@@ -70,33 +81,22 @@ def get_attack(attack, fmodel):
 
 
 
-def test_model(model_name, max_tests,f):
+def test_foolbox(model_name, max_tests,f):
     file = open(f,"a")
     print (model_name)
     torch.manual_seed(0)
-    model_test = nn.Sequential(nn.Conv2d(1, 32, 5, padding = 2), nn.ReLU(), nn.MaxPool2d(2, 2),
-                          nn.Conv2d(32, 64, 5, padding = 2), nn.ReLU(), nn.MaxPool2d(2, 2),
-                          Flatten(),
-                          nn.Linear(7*7*64, 1024), nn.ReLU(),
-                          nn.Linear(1024, 10)).to(device)
+    model_test = net().to(device)
     model_address = model_name + ".pt"
     model_test.load_state_dict(torch.load(model_address, map_location = device))
     model_test.eval()
     fmodel = foolbox.models.PyTorchModel(model_test,   # return logits in shape (bs, n_classes)
                                          bounds=(0., 1.), num_classes=10,
                                          device=device)
-    # ipdb.set_trace()
-    # b, l = get_batch(bs=batch_size)
-    # if not model_test.has_grad: 
-    #     print ("No Grad!!")
-    #     GE = foolbox.gradient_estimators.CoordinateWiseGradientEstimator(0.1)
-    #     fmodel = foolbox.models.ModelWithEstimatedGradients(fmodel, GE)
 
-    attacks_list = ['PA']
+    attacks_list = ['BA']
     # attacks_list = ['SAPA','PA','IGD','AGNA','BA','DeepFool','PAL2','FGSM','IFGSM','PGD','IGM']
-    types_list   = [ 0  ]#  ,  2      , 2    , 3]
+    types_list   = [ 2  ]#  ,  2      , 2    , 3]
     # types_list   = [ 0    , 0  , 2   , 2    , 2  ,  2      , 2    , 3    , 3     , 3   , 3   ]
-    # attacks_list = ['SAPA']#,'PA','IGD','AGNA','BA','DeepFool','PAL2','FGSM','IFGSM','PGD','IGM']
     for i in range(len(attacks_list)):
         attack_name = attacks_list[i]
         types = types_list[i]
@@ -105,47 +105,115 @@ def test_model(model_name, max_tests,f):
 
         if attack_name == "BA":
             max_check = min(100,max_tests)
-            test_loader = DataLoader(mnist_test, batch_size = 1, shuffle=True)
+            test_loader = DataLoader(mnist_test, batch_size = 1, shuffle=False)
         start = time.time()
         file.write ("\n" + attack_name + "\n")
         attack, metric, args, kwargs = get_attack(attack_name, fmodel)
         total = 0
         err = 0
         for X,y in test_loader:
+            distance = 1000
             total += 1
             image  = X[0,0,:,:].view(1,28,28).detach().numpy()
             label  = y[0].item()
-            adversarial = attack(image, label=label, **kwargs)
-            try :
-                adversarial.all()
-            except:
-                file.write(str(1000) + "\n")
-                continue
-            adv = torch.from_numpy(adversarial).view(1,1,28,28).to(device)
-            pred_label = torch.argmax(model_test(adv),dim = 1)[0]
-            if (label != pred_label):
-                err+=1
-            adv = torch.from_numpy(adversarial)
-            if (types == 0):
-                file.write(str(norms_l0(X - adv).item()) + "\n")
-            elif (types == 2):
-                file.write(str(norms(X - adv).item()) + "\n")
-            elif (types == 3):
-                file.write(str(torch.abs(X - adv).max().item()) + "\n")
+            restarts = 10
+            # ipdb.set_trace()
+            for r in range (restarts):
+                adversarial = attack(image, label=label, **kwargs)
+                try :
+                    adversarial.all()
+                    adv = torch.from_numpy(adversarial).view(1,1,28,28).to(device)
+                    adv = torch.from_numpy(adversarial)
+                    # pred_label = torch.argmax(model_test(adv),dim = 1)[0]
+                    distance = min(distance, norms_l2(X - adv).item())
+                except:
+                    a = 1
+            
+            file.write(str(distance) + "\n")
+            # if (label != pred_label):
+            #     err+=1
+            # if (types == 0):
+            #     file.write(str(norms_l0(X - adv).item()) + "\n")
+            # elif (types == 2):
+            #     file.write(str(norms(X - adv).item()) + "\n")
+            # elif (types == 3):
+            #     file.write(str(torch.abs(X - adv).max().item()) + "\n")
             if (total >= max_check):
                 break
         print("Time Taken = ", time.time() - start)
+        file.write("Time Taken = " + str(time.time() - start) + "\n")
     file.close()
 
-start = time.time()
-mnist_test = datasets.MNIST("../../data", train=False, download=True, transform=transforms.ToTensor())
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-# test_model("NN/April/8th/rand_0.04_alphas_[0.2, 0.25, 0.05]_iter_7", 100)
-import sys
-args = sys.argv
-f = args[1]
-# test_model("NN/9March/1_1_1_random_2_extend_new_iter_6", 10000,f)
-test_model("Models/pgd_all_iter_14", 10,f)
-# test_model("NN/April/8th/rand_0.04_alphas_[0.2, 0.25, 0.05]_iter_7", 1000,f)
-# test_model("NN/Naive/all_out_iter_5", 10000,f)
+
+
+def test_pgd(model_name):
+    model = net().to(device)
+    model_address = model_name + ".pt"
+    model.load_state_dict(torch.load(model_address, map_location = device))
+    attack = pgd_l2
+    test_loader = DataLoader(mnist_test, batch_size = 1000, shuffle=False)
+
+    start = time.time()
+    epoch_i = 0
+    lr = None
+    # if (attack == pgd_all):
+    #     adv_err, adv_loss = epoch_adversarial(test_loader, model_test, attack, device = device)
+    # else:
+    # adv_loss, adv_acc = epoch(test_loader, lr, model, epoch_i, device = device)
+    adv_loss, adv_acc = epoch_adversarial(test_loader, lr, model, epoch_i, attack, device = device, stop = False, num_iter = 200)
+    print("Acc: ",adv_acc)
+
+
+# test_foolbox("Models/PGD_all_topk/pgd_all_const_eps_k_rand_alph_inf_0_01_iter_19", 1000,f)
+model_list = ["l_1_iter_14", "l_2_iter_14", "l_inf_iter_14", "msd_iter_14", "naive_all_out_iter_14", "naive_triple_iter_14"]
+model_list = ["msd_iter_14", "naive_all_out_iter_14", "naive_triple_iter_14"]
+# choice = int(args[3])
+# f = "logs/" + model_list[choice] + "_10restartsPA.txt"
+# test_foolbox("Models/{0}".format(model_list[0]), 10, f)
+# for i in range(11,20):
+    # print (i)
+test_pgd("Models/msd_iter_14")
+
+# for model in model_list:
+#     print (model)
+#     test_pgd("Models/{0}".format(model))
+    # break
+
 print ("Time Taken = ", time.time() - start)
+
+
+eps_1 = [3,6,9,12,20,30,50,60,70,80,90,100]
+eps_2 = [0.05,0.1,0.2,0.3,0.5,0.7,1,2,3,4,5,10]
+eps_3 = [0.005,0.01,0.02,0.03,0.05,0.07,0.1,0.2,0.3,0.4,0.5,1]
+num_1 = [50,50,50,100,100,200,200,200,300,300,300,300]
+num_2 = [30,40,50,50,100,100,150,150,150,150,300,300]
+num_3 = [30,40,50,50,100,100,150,150,150,150,300,300]
+
+
+def test_saver(model_name):
+    model = net().to(device)
+    model_address = model_name + ".pt"
+    model.load_state_dict(torch.load(model_address, map_location = device))
+    test_batches = DataLoader(mnist_test, batch_size = 1000, shuffle=False)
+    for index in range(len(eps_1)):
+            e_1 = eps_1[index]
+            n_1 = num_1[index]
+            total_loss, total_acc_1 = epoch_adversarial_saver(test_batches, model, pgd_l1_topk, e_1, n_1, device = device)
+            # print('Test Acc 1: {0:.4f}'.format(total_acc_1))    
+            # break
+    for index in range(len(eps_2)):        
+            e_2 = eps_2[index]
+            n_2 = num_2[index]
+            total_loss, total_acc_2 = epoch_adversarial_saver(test_batches, model, pgd_l2, e_2, n_2, device = device)
+
+    for index in range(len(eps_3)):
+            e_3 = eps_3[index]
+            n_3 = num_3[index]
+            total_loss, total_acc_3 = epoch_adversarial_saver(test_batches, model, pgd_linf, e_3, n_3, device = device)
+            # total_loss, total_acc_0 = epoch_adversarial(test_batches, lr_schedule, model, epoch_i,  pgd_l0, criterion, opt = None, device = device, stop = False)
+        # print('Test Acc Clean: {0:.4f}, Test Acc 1: {1:.4f}, Test Acc 2: {2:.4f}, Test Acc inf: {3:.4f}, Time: {4:.1f}'.format(test_acc, total_acc_1,total_acc_2, total_acc_3, time.time() - start_time))    
+        # print('Test Acc 0: {0:.4f}'.format(total_acc_0))   
+
+
+# test_pgd("Models/msd_iter_14")
+# test_saver("Models/msd_iter_14")
