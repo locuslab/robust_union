@@ -19,6 +19,17 @@ import sys
 import foolbox
 import foolbox.attacks as fa
 from cifar_funcs import *
+import argparse
+
+
+parser = argparse.ArgumentParser(description='Adversarial Training for MNIST', formatter_class=argparse.RawTextHelpFormatter)
+parser.add_argument("gpu_id", help="Id of GPU to be used", type=int)
+parser.add_argument("model", help="Type of Adversarial Training: \n\t 0: l_inf \n\t 1: l_1 \n\t 2: l_2 \n\t 3: msd \n\t 4: triple \n\t 5: worst \n\t 6: vanilla", type=int)
+parser.add_argument("batch_size", help = "Batch Size for Train Set (Default = 100)", type = int, default = 100)
+
+
+params = parser.parse_args()
+
 
 args = sys.argv
 
@@ -125,17 +136,17 @@ def test_pgd(model_name):
     try:
         total_loss, total_acc = epoch(test_batches, lr_schedule, model, epoch_i, criterion, opt = None, device = device, stop = False)
     except:
-        total_loss, total_acc = epoch(test_batches, lr_schedule, model, epoch_i, criterion, opt = None, device = device, stop = False)
+        # total_loss, total_acc = epoch(test_batches, lr_schedule, model, epoch_i, criterion, opt = None, device = device, stop = False)
         print("ok")
-    total_loss, total_acc_4 = epoch_adversarial(test_batches, None, model, epoch_i,  pgd_all, device = device, stop = False)
-    total_loss, total_acc_1 = epoch_adversarial(test_batches,None,  model, epoch_i, pgd_l1_topk,device = device, stop = False, restarts = 10)
-    total_loss, total_acc_2 = epoch_adversarial(test_batches, None, model, epoch_i, pgd_l2, device = device, stop = False, restarts = 10)
+    # total_loss, total_acc_4 = epoch_adversarial(test_batches, None, model, epoch_i,  pgd_all, device = device, stop = False)
+    # total_loss, total_acc_1 = epoch_adversarial(test_batches,None,  model, epoch_i, pgd_l1_topk,device = device, stop = False, restarts = 10)
+    # total_loss, total_acc_2 = epoch_adversarial(test_batches, None, model, epoch_i, pgd_l2, device = device, stop = True, restarts = 10, epsilon = 0.5, num_iter = 500, alpha = 0.01)
     total_loss, total_acc_inf = epoch_adversarial(test_batches, None, model, epoch_i, pgd_linf, device = device, stop = False, restarts = 10)
-    print('Test Acc 1: {0:.4f}'.format(total_acc_1))    
-    print('Test Acc 2: {0:.4f}'.format(total_acc_2))    
+    # print('Test Acc 1: {0:.4f}'.format(total_acc_1))    
+    # print('Test Acc 2: {0:.4f}'.format(total_acc_2))    
     print('Test Acc Inf: {0:.4f}'.format(total_acc_inf))    
-    print('Test Acc Clean: {0:.4f}'.format(total_acc))    
-    print('Test Acc All: {0:.4f}'.format(total_acc_4))    
+    # print('Test Acc Clean: {0:.4f}'.format(total_acc))    
+    # print('Test Acc All: {0:.4f}'.format(total_acc_4))    
 
     '''    
     for index in range(len(eps_1)):
@@ -311,7 +322,7 @@ def test_saver(model_name):
 
 
 
-models = ["l_2_0_3.pt", "l_inf_0_03.pt", "worst_topk/lr1_iter_50.pt", "triple_topk/lr1_iter_50.pt", "L1_topk/lr1_iter_50.pt", "lr1_topk_rand_iter_50.pt"]
+models = ["l_2_0_3.pt", "l_inf_0_03.pt", "worst_topk/lr1_iter_50.pt", "triple_topk/lr1_iter_50.pt", "L1_topk/lr1_iter_50.pt", "msd_topk/lr1_topk_rand_iter_50.pt"]
 
 # for model_name in models:
     # print(model_name)
@@ -321,9 +332,9 @@ f = args[3]
 # test_pgd("RobustModels/triple_topk/lr1_iter_50.pt")
 # test_pgd("RobustModels/L1_topk/lr1_iter_50.pt")
 # test_pgd("RobustModels/{0}".format(models[0]))
-# test_pgd("RobustModels/{0}".format(models[1]))
+test_pgd("RobustModels/{0}".format(models[5]))
 # test_pgd("RobustModels/L1_topk/lr1_iter_50.pt")
-test_pgd("RobustModels/msd_topk/lr1_topk_rand_iter_50.pt")
+# test_pgd("RobustModels/msd_topk/lr1_topk_rand_iter_50.pt")
 # start = time.time()
 import time
 start = time.time()
@@ -352,3 +363,4 @@ for choice in range(4):
 #     test_pgd(model_name)
 # test_foolbox("RobustModels/L1/l_1_att2_iter_25.pt", 1000, args[3])
 
+    

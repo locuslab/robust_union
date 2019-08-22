@@ -148,7 +148,7 @@ def pgd_all(model, X,y, epsilon_l_inf = 0.3, epsilon_l_2= 1.5, epsilon_l_1 = 12,
             delta_l_inf = torch.min(torch.max(delta_l_inf, -X), 1-X) # clip X+delta to [0,1]
 
             #For L1
-            k = random.randint(5,40)
+            k = random.randint(5,20)
             alpha_l_1 = 0.05/k*20
             delta_l_1  = delta.data + alpha_l_1*l1_dir_topk(delta.grad, delta.data, X, alpha_l_1, k=k)
             delta_l_1 = proj_l1ball(delta_l_1, epsilon_l_1, device)

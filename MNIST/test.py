@@ -12,14 +12,26 @@ from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from mnist_funcs import *
 import time
+import argparse 
 
 import sys
 args = sys.argv
 start = time.time()
 
+# parser = argparse.ArgumentParser(description='Adversarial Training for MNIST', formatter_class=argparse.RawTextHelpFormatter)
+# parser.add_argument("gpu_id", help="Id of GPU to be used", type=int)
+# parser.add_argument("model", help="Type of Adversarial Training: \n\t 0: l_inf \n\t 1: l_1 \n\t 2: l_2 \n\t 3: msd \n\t 4: triple \n\t 5: worst \n\t 6: vanilla", type=int)
+# parser.add_argument("batch_size", help = "Batch Size for Test Set (Default = 100)", type = int, default = 100)
+
+
+# params = parser.parse_args()
+
+
+
 mnist_test = datasets.MNIST("../../data", train=False, download=True, transform=transforms.ToTensor())
 device = torch.device("cuda:{}".format(args[1]) if torch.cuda.is_available() else "cpu")
 f = args[2]
+
 
 
 class Flatten(nn.Module):
@@ -150,7 +162,8 @@ def test_pgd(model_name):
     model = net().to(device)
     model_address = model_name + ".pt"
     model.load_state_dict(torch.load(model_address, map_location = device))
-    attack = pgd_l2
+    attack = pgd_linf_rand
+    print ("pgd_linf")
     test_loader = DataLoader(mnist_test, batch_size = 1000, shuffle=False)
 
     start = time.time()
@@ -160,7 +173,7 @@ def test_pgd(model_name):
     #     adv_err, adv_loss = epoch_adversarial(test_loader, model_test, attack, device = device)
     # else:
     # adv_loss, adv_acc = epoch(test_loader, lr, model, epoch_i, device = device)
-    adv_loss, adv_acc = epoch_adversarial(test_loader, lr, model, epoch_i, attack, device = device, stop = False, num_iter = 200)
+    adv_loss, adv_acc = epoch_adversarial(test_loader, lr, model, epoch_i, attack, device = device, stop = True, num_iter = 100, restarts = 10)
     print("Acc: ",adv_acc)
 
 
@@ -172,7 +185,8 @@ model_list = ["msd_iter_14", "naive_all_out_iter_14", "naive_triple_iter_14"]
 # test_foolbox("Models/{0}".format(model_list[0]), 10, f)
 # for i in range(11,20):
     # print (i)
-test_pgd("Models/msd_iter_14")
+# test_pgd("Models/msd_iter_14")
+test_pgd("Models/PGD_all_topk/pgd_all_const_eps_k_rand_alph_inf_0_01_k_limit_20_16Aug_iter_14")
 
 # for model in model_list:
 #     print (model)
