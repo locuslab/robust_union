@@ -19,6 +19,9 @@ def norms_l1(Z):
 def norms(Z):
     return Z.view(Z.shape[0], -1).norm(dim=1)[:,None,None,None]
 
+def norms_linf(Z):
+    return Z.view(Z.shape[0], -1).abs().max(dim=1)[0]    
+
 '''
 #DEFAULTS
 pgd_linf: epsilon=0.03, alpha=0.003, num_iter = 40
@@ -28,14 +31,15 @@ pgd_l2  : epsilon =0.5, alpha=0.05, num_iter = 40
 
 '''
 
-def pgd_l2(model, X, y, epsilon=0.5, alpha=0.05, num_iter = 40, device = "cuda:0", restarts = 0):
+def pgd_l2(model, X, y, epsilon=0.5, alpha=0.05, num_iter = 40, device = "cuda:0", restarts = 0, version = 0):
     max_delta = torch.zeros_like(X)
     delta = torch.zeros_like(X, requires_grad = True)
     for t in range(num_iter):
         output = model(X+delta)
         incorrect = output.max(1)[1] != y 
         correct = (1-incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).half()
-        #Finding the correct examples so as to attack only them
+        correct = 1.0 if version == 0 else correct
+        #Finding the correct examples so as to attack only them only for version 1 (Test time)
         loss = nn.CrossEntropyLoss()(model(X + delta), y)
         loss.backward()
         delta.data +=  correct*alpha*delta.grad.detach() / norms(delta.grad.detach())
@@ -55,7 +59,8 @@ def pgd_l2(model, X, y, epsilon=0.5, alpha=0.05, num_iter = 40, device = "cuda:0
             output = model(X+delta)
             incorrect = output.max(1)[1] != y 
             correct = (1-incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).half()
-            #Finding the correct examples so as to attack only them
+            correct = 1.0 if version == 0 else correct
+            #Finding the correct examples so as to attack only them only for version 1
             loss = nn.CrossEntropyLoss()(model(X + delta), y)
             loss.backward()
             delta.data +=  correct*alpha*delta.grad.detach() / norms(delta.grad.detach())
@@ -71,7 +76,7 @@ def pgd_l2(model, X, y, epsilon=0.5, alpha=0.05, num_iter = 40, device = "cuda:0
     return max_delta    
 
 
-def pgd_l1_topk(model, X,y, epsilon = 12, alpha = 0.05, num_iter = 40, k = 20, device = "cuda:1", restarts = 0):
+def pgd_l1_topk(model, X,y, epsilon = 12, alpha = 0.05, num_iter = 40, k = 20, device = "cuda:1", restarts = 0, version = 0):
     #Gap : Dont attack pixels closer than the gap value to 0 or 1
     gap = alpha
     max_delta = torch.zeros_like(X)
@@ -81,7 +86,8 @@ def pgd_l1_topk(model, X,y, epsilon = 12, alpha = 0.05, num_iter = 40, k = 20, d
         output = model(X+delta)
         incorrect = output.max(1)[1] != y 
         correct = (1-incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).half()
-        #Finding the correct examples so as to attack only them
+        correct = 1.0 if version == 0 else correct
+        #Finding the correct examples so as to attack only them only for version 1
         loss = nn.CrossEntropyLoss()(model(X+delta), y)
         loss.backward()
         k = random.randint(5,20)
@@ -103,7 +109,8 @@ def pgd_l1_topk(model, X,y, epsilon = 12, alpha = 0.05, num_iter = 40, k = 20, d
             output = model(X+delta)
             incorrect = output.max(1)[1] != y 
             correct = (1-incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).half()
-            #Finding the correct examples so as to attack only them
+            correct = 1.0 if version == 0 else correct
+            #Finding the correct examples so as to attack only them only for version 1
             loss = nn.CrossEntropyLoss()(model(X+delta), y)
             loss.backward()
             k = random.randint(5,20)
@@ -120,7 +127,7 @@ def pgd_l1_topk(model, X,y, epsilon = 12, alpha = 0.05, num_iter = 40, k = 20, d
 
     return max_delta
 
-def pgd_linf(model, X, y, epsilon=0.03, alpha=0.003, num_iter = 40, device = "cuda:0", restarts = 0):
+def pgd_linf(model, X, y, epsilon=0.03, alpha=0.003, num_iter = 40, device = "cuda:0", restarts = 0, version = 0):
     """ Construct FGSM adversarial examples on the examples X"""
     max_delta = torch.zeros_like(X)
     delta = torch.zeros_like(X, requires_grad=True)    
@@ -128,7 +135,8 @@ def pgd_linf(model, X, y, epsilon=0.03, alpha=0.003, num_iter = 40, device = "cu
         output = model(X+delta)
         incorrect = output.max(1)[1] != y 
         correct = (1-incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).half()
-        #Finding the correct examples so as to attack only them
+        correct = 1.0 if version == 0 else correct
+        #Finding the correct examples so as to attack only them only for version 1
         loss = nn.CrossEntropyLoss()(model(X + delta), y)
         loss.backward()
         delta.data = (delta.data + alpha*correct*delta.grad.detach().sign()).clamp(-epsilon,epsilon)
@@ -143,7 +151,8 @@ def pgd_linf(model, X, y, epsilon=0.03, alpha=0.003, num_iter = 40, device = "cu
             output = model(X+delta)
             incorrect = output.max(1)[1] != y 
             correct = (1-incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).half()
-            #Finding the correct examples so as to attack only them
+            correct = 1.0 if version == 0 else correct
+            #Finding the correct examples so as to attack only themonly for version 1
             loss = nn.CrossEntropyLoss()(model(X + delta), y)
             loss.backward()
             delta.data = (delta.data + alpha*correct*delta.grad.detach().sign()).clamp(-epsilon,epsilon)
@@ -192,7 +201,7 @@ def pgd_l0(model, X,y, epsilon = 12, alpha = 1, num_iter = 0, device = "cuda:1")
     return delta.detach()
 
 def msd_v0(model, X,y, epsilon_l_inf = 0.03, epsilon_l_2= 0.5, epsilon_l_1 = 12, 
-                alpha_l_inf = 0.003, alpha_l_2 = 0.05, alpha_l_1 = 0.05, num_iter = 50, device = "cuda:0"):
+                alpha_l_inf = 0.005, alpha_l_2 = 0.05, alpha_l_1 = 0.05, num_iter = 50, device = "cuda:0"):
     delta = torch.zeros_like(X,requires_grad = True)
     max_delta = torch.zeros_like(X)
     max_max_delta = torch.zeros_like(X)
@@ -201,27 +210,22 @@ def msd_v0(model, X,y, epsilon_l_inf = 0.03, epsilon_l_2= 0.5, epsilon_l_1 = 12,
     alpha_l_1_default = alpha_l_1
     
     for t in range(num_iter):
-        # output = model(X+delta)
-        # incorrect = output.max(1)[1] != y 
-        # correct = (1-incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).half()
-        correct = 1.0
-        #Finding the correct examples so as to attack only them
         loss = nn.CrossEntropyLoss()(model(X + delta), y)
         loss.backward()
         with torch.no_grad():                
             #For L_2
-            delta_l_2  = delta.data + alpha_l_2*correct*delta.grad / norms(delta.grad)      
+            delta_l_2  = delta.data + alpha_l_2*delta.grad / norms(delta.grad)      
             delta_l_2 *= epsilon_l_2 / norms(delta_l_2).clamp(min=epsilon_l_2)
             delta_l_2  = torch.min(torch.max(delta_l_2, -X), 1-X) # clip X+delta to [0,1]
 
             #For L_inf
-            delta_l_inf=  (delta.data + alpha_l_inf*correct*delta.grad.sign()).clamp(-epsilon_l_inf,epsilon_l_inf)
+            delta_l_inf=  (delta.data + alpha_l_inf*delta.grad.sign()).clamp(-epsilon_l_inf,epsilon_l_inf)
             delta_l_inf = torch.min(torch.max(delta_l_inf, -X), 1-X) # clip X+delta to [0,1]
 
             #For L1
             k = random.randint(5,20)
             alpha_l_1 = (alpha_l_1_default/k)*20
-            delta_l_1  = delta.data + alpha_l_1*correct*l1_dir_topk(delta.grad, delta.data, X, alpha_l_1, k = k)
+            delta_l_1  = delta.data + alpha_l_1*l1_dir_topk(delta.grad, delta.data, X, alpha_l_1, k = k)
             delta_l_1 = proj_l1ball(delta_l_1, epsilon_l_1, device)
             delta_l_1  = torch.min(torch.max(delta_l_1, -X), 1-X) # clip X+delta to [0,1]
             
@@ -290,6 +294,7 @@ def msd_v1(model, X,y, epsilon_l_inf = 0.03, epsilon_l_2= 0.5, epsilon_l_1 = 12,
 
 def pgd_worst_dir(model, X,y, epsilon_l_inf = 0.03, epsilon_l_2= 0.5, epsilon_l_1 = 12, 
     alpha_l_inf = 0.003, alpha_l_2 = 0.05, alpha_l_1 = 0.05, num_iter = 40, device = "cuda:0"):
+    #Always call version = 0
     delta_1 = pgd_l1_topk(model, X, y, epsilon = epsilon_l_1, alpha = alpha_l_1,  device = device)
     delta_2 = pgd_l2(model, X, y, epsilon = epsilon_l_2, alpha = alpha_l_2,  device = device)
     delta_inf = pgd_linf(model, X, y, epsilon = epsilon_l_inf, alpha = alpha_l_inf, device = device)
@@ -429,23 +434,24 @@ def epoch(loader, lr_schedule,  model, epoch_i, criterion = nn.CrossEntropyLoss(
 
 
 
-def epoch_adversarial_saver(loader, model, attack, epsilon, num_iter, device = "cuda:0"):
+def epoch_adversarial_saver(batch_size,loader, model, attack, epsilon, num_iter, device = "cuda:0", restarts = 10):
     criterion = nn.CrossEntropyLoss()
     train_loss = 0
     train_acc = 0
     train_n = 0
-    print("Attack: ", attack, " epsilon: ", epsilon )
+    # print("Attack: ", attack, " epsilon: ", epsilon )
     for i,batch in enumerate(loader): 
         X,y = batch['input'], batch['target']
-        delta = attack(model, X, y, epsilon = epsilon, num_iter = num_iter, device = device)
+        delta = attack(model, X, y, epsilon = epsilon, num_iter = num_iter, device = device, restarts = restarts)
         output = model(X+delta)
         loss = criterion(output, y)
         train_loss += loss.item()*y.size(0)
         train_acc += (output.max(1)[1] == y).sum().item()
-        print(output.max(1)[1] == y)
+        correct = (output.max(1)[1] == y).float()
+        eps = (correct*1000 + epsilon - 0.000001).float()
         train_n += y.size(0)
         break
-    return train_loss / train_n, train_acc / train_n
+    return eps,  train_acc / train_n
 
 def epoch_adversarial(loader, lr_schedule, model, epoch_i, attack, criterion = nn.CrossEntropyLoss(), 
     opt=None, device = "cuda:0", stop = False, **kwargs):
@@ -494,6 +500,7 @@ def triple_adv(loader, lr_schedule, model, epoch_i, attack,  criterion = nn.Cros
         X,y = batch['input'], batch['target']
         lr = lr_schedule(epoch_i + (i+1)/len(loader))
         opt.param_groups[0].update(lr=lr)
+        ##Always calls the default version 0 for the individual attacks
 
         #L1
         delta = pgd_l1_topk(model, X, y, device = device, epsilon = epsilon_l_1)
