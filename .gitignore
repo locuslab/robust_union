@@ -16,3 +16,4 @@ CIFAR10/Final2
 CIFAR10/*.sh
 MNIST/*.sh
 MNIST/Selected_6Sep
+.ipynb_checkpoints
