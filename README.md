@@ -15,6 +15,7 @@ The instructions for reproducing the results can be found in the folder `MNIST` 
 
 ## Dependencies
 The repository is written using `python 3.5`. To install dependencies run the command:
+
 `pip install -r requirements.txt`
 
 
