@@ -44,7 +44,18 @@
 
 ## For Reproducing the Results
 
-	1. MSD MNIST: 
+**0. P_inf:**  
+`python train.py -model 0`
+	
+**1. P1:**  
+`python train.py -model 1`
+
+**2. P2:**  
+`python train.py -model 2`
+	
+**3. MSD: ** 
+`python train.py -model 3`
+
 	opt = optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
 	lr_schedule = lambda t: np.interp([t], [0, 3, 7, 15], [0, 0.05, 0.001, 0.0001])[0]
 	criterion = nn.CrossEntropyLoss()
@@ -59,14 +70,17 @@
             	alpha_l_2 = 0.2, 
 		        num_iter = 100
 
-	2. MNIST Triple Augmentation:
+**4. Worst Augmentation:**
+`python train.py -model 4` 
 
-	3. MNIST Worst Augmentation:
+	lr_choice = 1
+	Epochs = 20
+	k_map = 0
+	Restarts for l1 = 2
+	
+**5. Triple Augmentation:**  
+`python train.py -model 5`
 
-	4. MNIST P1:
-
-	5. MNIST P2:
-
-	6. MNIST P_inf:
-
-
+	lr_choice == 2
+	kmap = 0
+	Epochs = 20
