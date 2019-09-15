@@ -44,29 +44,30 @@
 
 ## For Reproducing the Results
 
-	1. MSD MNIST: 
-	opt = optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
-	lr_schedule = lambda t: np.interp([t], [0, 3, 7, 15], [0, 0.05, 0.001, 0.0001])[0]
-	criterion = nn.CrossEntropyLoss()
-	epochs = 15
-	epoch_adversarial(train_loader, lr_schedule, model, epoch_i = t, attack = pgd_all, opt = opt, device = device, epsilon_l_inf = 0.3, epsilon_l_1 = 12, epsilon_l_2 = 1.5)
-	In pgd_all, epsilon_l_inf = 0.3, 
-            	epsilon_l_2= 1.5, 
-            	epsilon_l_1 = 12, 
-                alpha_l_inf = 0.01,
-                k = random.randint(5,20)
-            	alpha_l_1 = 0.05/k*20
-            	alpha_l_2 = 0.2, 
-		        num_iter = 100
 
-	2. MNIST Triple Augmentation:
+**0. P_inf:**  
+`python train.py -model 0`
+	
+**1. P1:**  
+`python train.py -model 1`
 
-	3. MNIST Worst Augmentation:
+	Trained with k = 1 for pgd_l1_topk
+	Early Stop: Epoch 45
 
-	4. MNIST P1:
+**2. P2:**  
+`python train.py -model 2`
+	
+**3. MSD:**   
+`python train.py -model 3`
 
-	5. MNIST P2:
+**4. Worst Augmentation:**  
+`python train.py -model 4` 
 
-	6. MNIST P_inf:
+	alpha_inf = 0.005
+	Early stop : Epoch 40
+	
+**5. Triple Augmentation:**  
+`python train.py -model 5`
+
 
 
