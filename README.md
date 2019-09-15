@@ -22,32 +22,16 @@ The instructions for reproducing the results can be found in the folder `MNIST` 
 | **ℓ1 attacks (ϵ=12)**   |1.4\% | 43.4\% | 71.8\% | 82\% | 78\% | 54.6\% | 15.6\% | 62.3\% |
 | **All Attacks**         |1.4\% | 0.4\% | 0.0\% | 39\% |   8\% | 53.7\% | 15.6\% | **58.7\%**  |
 
+**Note:** All attacks are performed with 10 random restarts on the first 1000 test examples.
 
 ## Robustness on CIFAR10 Dataset
 
 |   |P∞ | P_2	|P_1	| Worst-PGD | PGD Aug | MSD |
 | ---------| --------- | --------- | --------- | --------- |  --------- | --------- | --------- | --------- | 
-| **Clean** | 99.1\% | 99.4\% | 98.9\% | 99\% | 99\% | 98.9\% | 99.1\%  |98.0\% |
-| **ℓ∞ attacks (ϵ=0.3)**  | 90.3\% | 0.4\% | 0.0\% | 77\% |   8\% | 68.4\% | 83.7\% | 63.7\% |
-| **ℓ2 attacks (ϵ=1.5)**  |46.4\% | 87.0\% | 70.7\% | 39\% | 80\% | 82.6\% | 76.2\% | 82.7\% |
-| **ℓ1 attacks (ϵ=12)**   |1.4\% | 43.4\% | 71.8\% | 82\% | 78\% | 54.6\% | 15.6\% | 62.3\% |
-| **All Attacks**         |1.4\% | 0.4\% | 0.0\% | 39\% |   8\% | 53.7\% | 15.6\% | **58.7\%**  |
+| **Clean** | 83.3\% & 90.2\% & 73.3\% & 81.0\% & 84.6\% & 81.7\%|
+| **ℓ∞ attacks (ϵ=0.3)**  | 50.7\% | 28.3\% | 0.2\% | 44.9\% | 42.5\% | 47.6\% |
+| **ℓ2 attacks (ϵ=1.5)**  |58.2\% | 61.6\% | 0.0\% | 62.1\% | 65.3\% | 64.8\% |
+| **ℓ1 attacks (ϵ=12)**   |16.0\% | 46.6\% | 7.9\% | 39.4\% | 54.0\% | 53.4\% |
+| **All Attacks**         |15.6\% | 25.2\% | 0.0\% | 34.9\% | 40.6\% | **46.1\%**  |
 
-\begin{table}[t]
-  \caption{Summary of adversarial accuracy results for CIFAR10 (higher is better)}
-  \label{table:cifar10}
-  \centering
-  \begin{tabular}{l|rrrrrr}
-    \hline
-                          & $P_\infty$ & $P_2$ & $P_1$ & Worst-PGD & PGD-Aug & MSD \\
-    \hline
-    Clean accuracy                           & 83.3\% & 90.2\% & 73.3\% & 81.0\% & 84.6\% & 81.7\% \\
-    \hline
-    $\ell_\infty$ attacks $(\epsilon=0.03)$& 50.7\% & 28.3\% & 0.2\% & 44.9\% & 42.5\% & 47.6\%\\
-    $\ell_2$ attacks $(\epsilon=0.5)$      & 58.2\% & 61.6\% & 0.0\% & 62.1\% & 65.3\% & 64.8\%\\
-    $\ell_1$ attacks $(\epsilon=12)$       & 16.0\% & 46.6\% & 7.9\% & 39.4\% & 54.0\% & 53.4\%\\
-    \hline
-    All attacks                            &15.6\% & 25.2\% & 0.0\% & 34.9\% & 40.6\% & \textbf{46.1}\%\\
-    \hline
-  \end{tabular}
-\end{table}
+**Note:** All attacks are performed with 10 random restarts on the first 1000 test examples.
