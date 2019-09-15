@@ -11,7 +11,12 @@ We show that it is indeed possible to adversarially train a robust model against
 
 ## What does this repository contain?
 Code for training and evaluating all the experiments that support the aforementioned paper are provided in this repository. 
-The instructions for reproducing the results can be found in the folder `MNIST` and `CIFAR10` respectively.
+The instructions for reproducing the results can be found in the folder `MNIST` and `CIFAR10` respectively. 
+
+## Dependencies
+The repository is written using `python 3.5`. To install dependencies run the command:
+`pip install -r requirements.txt`
+
 
 ## Robustness on MNIST Dataset
 |   |P∞ | P_2	|P_1	|B-ABS | ABS | Worst-PGD | PGD Aug | MSD |
