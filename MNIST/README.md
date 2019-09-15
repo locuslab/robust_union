@@ -53,7 +53,7 @@
 **2. P2:**  
 `python train.py -model 2`
 	
-**3. MSD: ** 
+**3. MSD:**   
 `python train.py -model 3`
 
 	opt = optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
