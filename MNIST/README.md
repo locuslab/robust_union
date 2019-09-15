@@ -70,7 +70,7 @@
             	alpha_l_2 = 0.2, 
 		        num_iter = 100
 
-**4. Worst Augmentation:**
+**4. Worst Augmentation:**  
 `python train.py -model 4` 
 
 	lr_choice = 1
