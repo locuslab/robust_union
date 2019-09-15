@@ -17,7 +17,7 @@ import random
 pgd_linf: epsilon=0.3, alpha=0.01, num_iter = 100
 pgd_l0  : epsilon = 12, alpha = 1
 pgd_l1_topk  : epsilon = 12, alpha = 0.02, num_iter = 100, k = rand(5,20) --> (alpha = alpha/k *20)
-pgd_l2  : epsilon =1.5, alpha=0.1, num_iter = 100
+pgd_l2  : epsilon = 1.5, alpha=0.1, num_iter = 100
 
 
 Original
@@ -76,14 +76,14 @@ def pgd_worst_dir(model, X,y, epsilon_l_inf = 0.3, epsilon_l_2= 1.5, epsilon_l_1
 
 
 def msd_v0(model, X,y, epsilon_l_inf = 0.3, epsilon_l_2= 1.5, epsilon_l_1 = 12, 
-                        alpha_l_inf = 0.01, alpha_l_2 = 0.1, alpha_l_1 = 0.05, 
-                        num_iter = 100, device = "cuda:1", k_map = 0):
+                        alpha_l_inf = 0.01, alpha_l_2 = 0.07, alpha_l_1 = 0.03, 
+                        num_iter = 50, device = "cuda:1", k_map = 0):
     alpha_l_1_default = alpha_l_1
     max_max_delta = torch.zeros_like(X)
     max_max_loss = torch.zeros(y.shape[0]).to(y.device)
-    for i in range(2):
+    for j in range(1):
         # ipdb.set_trace()
-        if i==0:
+        if j==0:
             delta = torch.zeros_like(X,requires_grad = True)
         else:
             delta = torch.rand_like(X,requires_grad = True) 
@@ -110,21 +110,31 @@ def msd_v0(model, X,y, epsilon_l_inf = 0.3, epsilon_l_2= 1.5, epsilon_l_1 = 12,
                 elif k_map == 1:
                     k = random.randint(10,40)
                     alpha_l_1   = (alpha_l_1_default/k)*40
+                elif k_map ==2 :
+                    k = 10
+                    alpha_l_1 = 0.05
+                else :
+                    k = 1
+                    alpha_l_1 = 0.1
 
                 delta_l_1   = delta.data + alpha_l_1*l1_dir_topk(delta.grad, delta.data, X, alpha_l_1, k=k)
                 delta_l_1   = proj_l1ball(delta_l_1, epsilon_l_1, device)
                 delta_l_1   = torch.min(torch.max(delta_l_1, -X), 1-X) # clip X+delta to [0,1]
                 
                 #Compare
-                delta_tup = (delta_l_1, delta_l_2, delta_l_inf)
+                delta_tup = (delta_l_inf, delta_l_1, delta_l_2)
                 max_loss = torch.zeros(y.shape[0]).to(y.device)            
-                for delta_temp in delta_tup:
+                selection_stats = torch.zeros(y.shape[0]).to(y.device)- 1
+                for i,delta_temp in enumerate(delta_tup):
                     loss_temp = nn.CrossEntropyLoss(reduction = 'none')(model(X + delta_temp), y)
                     max_delta[loss_temp >= max_loss] = delta_temp[loss_temp >= max_loss]
+                    selection_stats[loss_temp >= max_loss] = i
                     max_loss = torch.max(max_loss, loss_temp)
                 delta.data = max_delta.data
                 max_max_delta[max_loss> max_max_loss] = max_delta[max_loss> max_max_loss]
                 max_max_loss[max_loss> max_max_loss] = max_loss[max_loss> max_max_loss]
+            # ipdb.set_trace()
+            # selection_stats_final = (selection_stats_final*(t-1) + selection_stats)/t
             delta.grad.zero_()
         del delta
 
@@ -223,7 +233,7 @@ def pgd_linf(model, X, y, epsilon=0.3, alpha=0.01, num_iter = 100, restarts = 0,
 
 
 
-def pgd_l2(model, X, y, epsilon=1.5, alpha=0.1, num_iter = 100, restarts = 0, device = "cuda:1"):
+def pgd_l2(model, X, y, epsilon=2, alpha=0.1, num_iter = 100, restarts = 0, device = "cuda:1"):
     max_delta = torch.zeros_like(X)
     delta = torch.zeros_like(X, requires_grad = True)
     for t in range(num_iter):
@@ -298,7 +308,7 @@ def pgd_l0(model, X,y, epsilon = 12, alpha = 0.5, num_iter = 100, device = "cuda
     return delta.detach()
 
 
-def pgd_l1_topk(model, X,y, epsilon = 12, alpha = 0.05, num_iter = 50, k_map = 0, device = "cuda:1", restarts = 2):
+def pgd_l1_topk(model, X,y, epsilon = 12, alpha = 0.05, num_iter = 50, k_map = 0, device = "cuda:1", restarts = 1):
         #Gap : Dont attack pixels closer than the gap value to 0 or 1
     gap = alpha
     max_delta = torch.zeros_like(X)
@@ -319,7 +329,7 @@ def pgd_l1_topk(model, X,y, epsilon = 12, alpha = 0.05, num_iter = 50, k_map = 0
             k = random.randint(10,40)
             alpha   = (alpha_l_1_default/k)*40
         else:
-            k = 20
+            k = 10
             alpha = alpha_l_1_default
         delta.data += alpha*correct*l1_dir_topk(delta.grad.detach(), delta.data, X, gap,k)
         if (norms_l1(delta) > epsilon).any():
@@ -576,7 +586,7 @@ def triple_adv(loader, lr_schedule, model, epoch_i, attack, criterion = nn.Cross
 
         X,y = X.to(device), y.to(device)
         #L1
-        delta = pgd_l1_topk(model, X, y, device = device, epsilon = epsilon_l_1, k_map = k_map, num_iter = 50, restarts = 2)
+        delta = pgd_l1_topk(model, X, y, device = device, epsilon = epsilon_l_1, k_map = k_map)
         yp = model(X+delta)
         loss = nn.CrossEntropyLoss()(yp,y)
         if opt:
@@ -716,7 +726,7 @@ def pgd_all_old(model, X,y, randomness = 0.04, epsilon_l_inf = 0.3, epsilon_l_2=
         delta.data = torch.min(torch.max(delta.detach(), -X), 1-X) # clip X+delta to [0,1] 
         delta.grad.zero_()    
     return delta.detach()
-
+''
 def l1_dir(grad, delta, X, alpha) :
     #Check which all directions can still be increased such that 
     #they haven't been clipped already and have scope of increasing

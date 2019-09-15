@@ -28,8 +28,9 @@ parser = argparse.ArgumentParser(description='Adversarial Training for MNIST', f
 parser.add_argument("-gpu_id", help="Id of GPU to be used", type=int, default = 0)
 parser.add_argument("-model", help="Type of Adversarial Training: \n\t 0: l_inf \n\t 1: l_1 \n\t 2: l_2 \n\t 3: msd \n\t 4: triple \n\t 5: worst \n\t 6: vanilla", type=int, default = 3)
 parser.add_argument("-batch_size", help = "Batch Size for Test Set (Default = 100)", type = int, default = 100)
-parser.add_argument("-attack", help = "Foolbox = 0; Custom PGD = 1, Saver = 2", type = int, default = 0)
+parser.add_argument("-attack", help = "Foolbox = 0; Custom PGD = 1, Saver = 2, Clean = 3", type = int, default = 0)
 parser.add_argument("-restarts", help = "Default = 10", type = int, default = 10)
+parser.add_argument("-path", help = "To override default model fetching", type = str)
 
 
 params = parser.parse_args()
@@ -39,6 +40,7 @@ batch_size = params.batch_size
 choice = params.model
 attack = params.attack
 res = params.restarts
+path = params.path
 
 
 device = torch.device("cuda:{0}".format(device_id) if torch.cuda.is_available() else "cpu")
@@ -118,17 +120,18 @@ def test_foolbox(model_name, max_tests):
             m.float() 
     fmodel = foolbox.models.PyTorchModel(model, bounds=(0, 1), num_classes=10, device = device)
 
-    # attacks_list = ['BA']
-    types_list   = [ 2    ,  2   ]#   , 2    , 3]
+    attacks_list = ['BA']
+    types_list   = [ 2  ]#   , 3]
     # attacks_list = ['SAPA','PA','IGD','AGNA','DeepFool','PAL2','FGSM','PGD','IGM']
-    attacks_list = ['DeepFool','PAL2']
+    # attacks_list = ['SAPA']#,'PAL2']
+    # attacks_list = ['DeepFool','PAL2']
     # attacks_list = ['FGSM','PGD','IGM']
     # types_list   = [ 0    , 0  , 2   , 2    ,  2      , 2    , 3      , 3   , 3   ]
     # types_list   = [ 3      , 3   , 3   ]
     norm_dict = {0:norms_l0, 1:norms_l1, 2:norms,3:norms_linf}
     
     for j in range(len(attacks_list)):
-        file = open(model_name +"foolbox_logsL2.txt","a")
+        file = open(model_name +"foolbox_logsD_P.txt","a")
         restarts = res
         attack_name = attacks_list[j]
         file.write ("\n" + attack_name + "\n")
@@ -140,7 +143,6 @@ def test_foolbox(model_name, max_tests):
 
         if attack_name == "BA":
             # max_check = min(100,max_tests)
-            test_batches = Batches(test_set, batch_size = 1, shuffle=False, gpu_id = torch.cuda.current_device())
             restarts = 1
 
         output = np.ones((max_check))
@@ -287,7 +289,7 @@ for choice in range(4):
 
 
 
-def test_pgd(model_name):
+def test_pgd(model_name, clean = False):
     print (model_name)
     batch_size = 1000
     test_batches = Batches(test_set, batch_size, shuffle=False, num_workers=2, gpu_id = torch.cuda.current_device())
@@ -307,11 +309,14 @@ def test_pgd(model_name):
     lr_schedule = lambda t: np.interp([t], [0, epochs*2//5, epochs*4//5, epochs], [0, 0.1, 0.005, 0])[0]
     epoch_i = 0
     try:
-        total_loss, total_acc = epoch(test_batches, lr_schedule, model, epoch_i, criterion, opt = None, device = device, stop = False)
+        total_loss, total_acc = epoch(test_batches, lr_schedule, model, epoch_i, criterion, opt = None, device = device, stop = (not clean))
     except:
-        total_loss, total_acc = epoch(test_batches, lr_schedule, model, epoch_i, criterion, opt = None, device = device, stop = False)
+        total_loss, total_acc = epoch(test_batches, lr_schedule, model, epoch_i, criterion, opt = None, device = device, stop = (not clean))
         print("ok")
-    total_loss, total_acc_4 = epoch_adversarial(test_batches, None, model, epoch_i,  msd_v1, device = device, stop = True)
+    if (clean):
+        print('Test Acc Clean: {0:.4f}'.format(total_acc))
+        return
+    # total_loss, total_acc_4 = epoch_adversarial(test_batches, None, model, epoch_i,  msd_v1, device = device, stop = True)
     total_loss, total_acc_1 = epoch_adversarial(test_batches,None,  model, epoch_i, pgd_l1_topk,device = device, stop = True, restarts = res)
     total_loss, total_acc_2 = epoch_adversarial(test_batches, None, model, epoch_i, pgd_l2, device = device, stop = True, restarts = res, epsilon = 0.5, num_iter = 500, alpha = 0.01)
     total_loss, total_acc_inf = epoch_adversarial(test_batches, None, model, epoch_i, pgd_linf, device = device, stop = True, restarts = res)
@@ -319,13 +324,15 @@ def test_pgd(model_name):
     print('Test Acc 2: {0:.4f}'.format(total_acc_2))    
     print('Test Acc Inf: {0:.4f}'.format(total_acc_inf))    
     print('Test Acc Clean: {0:.4f}'.format(total_acc))    
-    print('Test Acc All: {0:.4f}'.format(total_acc_4))    
+    # print('Test Acc All: {0:.4f}'.format(total_acc_4))    
 
 
 
 
 model_list = ["LINF", "L1", "L2", "MSD_V0", "TRIPLE", "WORST", "VANILLA"]
 model_name = "Selected/{}".format(model_list[choice])
+if path is not None:
+    model_name = path
 # model_name = "RobustModels/msd_topk/lr2_topk_20_iter_50"
 # model_name = "Final/WORST/lr1_iter_40_alphainf_0_005"
 print (model_name)
@@ -333,5 +340,7 @@ if attack == 0:
     test_foolbox(model_name, 1000)
 elif attack == 1:
     test_pgd(model_name)
-else:
+elif attack ==2:
     test_saver(model_name)
+else:
+    test_pgd(model_name, clean = True)

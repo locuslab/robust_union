@@ -27,11 +27,11 @@ def norms_linf(Z):
 pgd_linf: epsilon=0.03, alpha=0.003, num_iter = 40
 pgd_l0  : epsilon = 12, alpha = 1
 pgd_l1_topk  : epsilon = 12, alpha = 0.05, num_iter = 40, k = rand(5,20) --> (alpha = alpha/k *20)
-pgd_l2  : epsilon =0.5, alpha=0.05, num_iter = 40
+pgd_l2  : epsilon =0.5, alpha=0.05, num_iter = 50
 
 '''
 
-def pgd_l2(model, X, y, epsilon=0.5, alpha=0.05, num_iter = 40, device = "cuda:0", restarts = 0, version = 0):
+def pgd_l2(model, X, y, epsilon=0.5, alpha=0.05, num_iter = 50, device = "cuda:0", restarts = 0, version = 0):
     max_delta = torch.zeros_like(X)
     delta = torch.zeros_like(X, requires_grad = True)
     for t in range(num_iter):
@@ -76,7 +76,7 @@ def pgd_l2(model, X, y, epsilon=0.5, alpha=0.05, num_iter = 40, device = "cuda:0
     return max_delta    
 
 
-def pgd_l1_topk(model, X,y, epsilon = 12, alpha = 0.05, num_iter = 40, k = 20, device = "cuda:1", restarts = 0, version = 0):
+def pgd_l1_topk(model, X,y, epsilon = 12, alpha = 0.05, num_iter = 40, k = 20, device = "cuda:1", restarts = 1, version = 0):
     #Gap : Dont attack pixels closer than the gap value to 0 or 1
     gap = alpha
     max_delta = torch.zeros_like(X)
@@ -201,7 +201,7 @@ def pgd_l0(model, X,y, epsilon = 12, alpha = 1, num_iter = 0, device = "cuda:1")
     return delta.detach()
 
 def msd_v0(model, X,y, epsilon_l_inf = 0.03, epsilon_l_2= 0.5, epsilon_l_1 = 12, 
-                alpha_l_inf = 0.005, alpha_l_2 = 0.05, alpha_l_1 = 0.05, num_iter = 50, device = "cuda:0"):
+                alpha_l_inf = 0.003, alpha_l_2 = 0.05, alpha_l_1 = 0.05, num_iter = 50, device = "cuda:0"):
     delta = torch.zeros_like(X,requires_grad = True)
     max_delta = torch.zeros_like(X)
     max_max_delta = torch.zeros_like(X)

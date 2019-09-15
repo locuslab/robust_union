@@ -8,6 +8,7 @@ parser = argparse.ArgumentParser(description='Draw inference from Results', form
 parser.add_argument("-model", help="Folder Containing All Attack Distances", type=str, default = "LINF")
 parser.add_argument("-dataset", help = "MNIST or CIFAR 10", type = str, default = "MNIST")  # MNIST, CIFAR10
 parser.add_argument("-num_samples", help = "Number of Test Examples", type = int, default = 1000)
+parser.add_argument("-path", help = "Override model (custom path)", type = str, default = None)
 
 
 params = parser.parse_args()
@@ -15,10 +16,13 @@ params = parser.parse_args()
 num_samples = params.num_samples
 dataset = params.dataset
 model = params.model
+path = params.path
 folder = dataset + "/" + "Selected/" + model
+if path != None:
+	folder = path
 
 
-out = open(dataset +"_" + folder.split("/")[-1] + ".txt", "w")
+out = open(dataset +"_RES/" + folder.split("/")[-1] + ".txt", "w")
 
 def myprint(s):
 	print(s)
@@ -26,8 +30,9 @@ def myprint(s):
 
 
 files = glob(folder + "/*.*")
-attacks_list = ['SAPA','PA','CPGDL1','IGD','AGNA','BA','DeepFool','PAL2','CPGDL2','FGSM','PGD','IGM', 'CPGDLINF']
-attacks_list = ['SAPA','PA','CPGDL1','IGD','AGNA','BA','DeepFool','DeepFool','CPGDL2','FGSM','PGD','IGM', 'CPGDLINF']
+# attacks_list = ['SAPA','PA','CPGDL1','IGD','AGNA','BA','DeepFool','PAL2','CPGDL2','FGSM','PGD','IGM', 'CPGDLINF']
+attacks_list = ['SAPA','PA','CPGDL1','IGD','AGNA','AGNA','DeepFool','PAL2','CPGDL2','FGSM','PGD','IGM', 'CPGDLINF']
+attacks_list = ['PA','PA','CPGDL1','IGD','AGNA','AGNA','DeepFool','DeepFool','CPGDL2','FGSM','PGD','PGD', 'CPGDLINF']
 attacks_npy = []
 
 l1_attacks = np.ones((num_samples, 3))
@@ -72,6 +77,7 @@ def print_inference(eps, vals, name):
 
 def get_acc(pos, e):
 	a = attacks_npy[pos]
+	#ipdb.set_trace()
 	name = attacks_list[pos]
 	accuracy = a[a>e].shape[0]/num_samples
 	myprint(name+ " : "+ str(accuracy))

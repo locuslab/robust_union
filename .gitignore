@@ -1,3 +1,4 @@
+CIFAR10/Selected
 CIFAR10/data
 MNIST/data
 MNIST/Models
@@ -5,3 +6,13 @@ MNIST/Final
 CIFAR10/RobustModels
 CIFAR10/models
 CIFAR10/Final
+MNIST/Selected
+MNIST_RES
+MNIST_RES_6Sep
+plots
+CIFAR10_RES
+MNIST/Final2
+CIFAR10/Final2
+CIFAR10/*.sh
+MNIST/*.sh
+MNIST/Selected_6Sep

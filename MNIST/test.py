@@ -23,6 +23,8 @@ parser.add_argument("-model", help="Type of Adversarial Training: \n\t 0: l_inf 
 parser.add_argument("-batch_size", help = "Batch Size for Test Set (Default = 100)", type = int, default = 100)
 parser.add_argument("-attack", help = "Foolbox = 0; Custom PGD = 1", type = int, default = 0)
 parser.add_argument("-restarts", help = "Default = 10", type = int, default = 10)
+parser.add_argument("-path", help = "To override default model fetching", type = str)
+parser.add_argument("-subset", help = "Subset of attacks", type = int, default = -1)
 
 
 params = parser.parse_args()
@@ -32,6 +34,8 @@ batch_size = params.batch_size
 choice = params.model
 attack = params.attack
 res = params.restarts
+path = params.path
+subset = params.subset
 
 
 mnist_test = datasets.MNIST("../../data", train=False, download=True, transform=transforms.ToTensor())
@@ -99,23 +103,39 @@ def test_foolbox(model_name, max_tests):
     torch.manual_seed(0)
     model_test = net().to(device)
     model_address = model_name + ".pt"
+    if path != None:
+        # model_address = model_name + "/best.pt"
+        model_address = model_name + "/iter_20.pt"
+    print(model_address)
     model_test.load_state_dict(torch.load(model_address, map_location = device))
     model_test.eval()
     fmodel = foolbox.models.PyTorchModel(model_test,
                                          bounds=(0., 1.), num_classes=10,
                                          device=device)
 
-    attacks_list = ['BA']
-    # attacks_list = ['SAPA','PA','IGD','AGNA','DeepFool','PAL2','FGSM','PGD','IGM']
-    types_list   = [ 2  ]#  ,  2      , 2    , 3]
-    # types_list   = [ 0    , 0  , 2   , 2     ,  2      , 2    , 3      , 3   , 3   ]
+    if subset == 0:
+        attacks_list = ['PA','SAPA']
+        types_list   = [ 0    , 0 ]
+    elif subset == 1:
+        types_list   = [ 2  ]
+        attacks_list = ['BA']
+    elif subset == 2:
+        attacks_list = ['IGD','AGNA','DeepFool','PAL2']
+        types_list = [2,2,2,2]
+    elif subset == 3 :
+        attacks_list =['FGSM','PGD','IGM']
+        types_list = [3,3,3]
+    else:
+        attacks_list = ['SAPA','PA','IGD','AGNA','BA','DeepFool','PAL2','FGSM','PGD','IGM']
+        types_list   = [ 0    , 0  , 2   , 2    ,  2  ,  2  ,      2    , 3      , 3   , 3 ]
+
     norm_dict = {0:norms_l0, 1:norms_l1, 2:norms,3:norms_linf}
 
     for i in range(len(attacks_list)):
-        file = open(model_name +"foolbox_logs.txt","a")
+        # file = open(model_name +"foolbox_logs_{0}.txt".format(str(subset)),"a")
         restarts = res
         attack_name = attacks_list[i]
-        file.write ("\n" + attack_name + "\n")
+        # file.write ("\n" + attack_name + "\n")
         print (attack_name )
         types = types_list[i]
         norm = norm_dict[types]
@@ -124,7 +144,6 @@ def test_foolbox(model_name, max_tests):
 
         if attack_name == "BA":
             # max_check = min(100,max_tests)
-            test_loader = DataLoader(mnist_test, batch_size = 1, shuffle=False)
             restarts = 1
 
 
@@ -150,28 +169,28 @@ def test_foolbox(model_name, max_tests):
                 except:
                     a = 1
             
-            file.write(str(distance) + "\n")
+            # file.write(str(distance) + "\n")
             output[total] = distance
             total += 1
-            print(total, " ", attack_name, " ",model_name)
+            print(total, " ", attack_name, " ",model_name, " ", distance)
             if (total >= max_check):
-                np.save(model_name + "/" + attack_name + ".npy" ,output)
+                np.save(model_name + "/debug_" + attack_name + ".npy" ,output)
                 break
 
         print("Time Taken = ", time.time() - start)
         # file.write("Time Taken = " + str(time.time() - start) + "\n")
-        file.close()
+        # file.close()
 
 
 
-def test_pgd(model_name):
+def test_pgd(model_name, clean = False):
     model = net().to(device)
     model_address = model_name + ".pt"
     model.load_state_dict(torch.load(model_address, map_location = device))
     print (model_name)
     attack = pgd_linf
     print ("pgd_linf")
-    test_loader = DataLoader(mnist_test, batch_size = 1000, shuffle=False)
+    test_loader = DataLoader(mnist_test, batch_size = batch_size, shuffle=False)
 
     start = time.time()
     epoch_i = 0
@@ -179,10 +198,13 @@ def test_pgd(model_name):
     # if (attack == pgd_all):
     #     adv_err, adv_loss = epoch_adversarial(test_loader, model_test, attack, device = device)
     # else:
-    # adv_loss, adv_acc = epoch(test_loader, lr, model, epoch_i, device = device)
+    if clean:
+        adv_loss, adv_acc = epoch(test_loader, lr, model, epoch_i, device = device)
+        print('Clean Acc : {0:4f}'.format(adv_acc))
+        return
     # adv_loss, adv_acc = epoch_adversarial(test_loader, lr, model, epoch_i, attack, device = device, stop = True, num_iter = 100, restarts = 10)
     # print("Acc: ",adv_acc)
-    # total_loss, total_acc_4 = epoch_adversarial(test_loader, None, model, epoch_i,  msd_v1, device = device, stop = True)
+    # total_loss, total_acc_4 = epoch_adversarial(test_loader, None, model, epoch_i,  msd_v0, device = device, stop = True)
     total_loss, total_acc_1 = epoch_adversarial(test_loader,None,  model, epoch_i, pgd_l1_topk,device = device, stop = True, restarts = res)
     total_loss, total_acc_2 = epoch_adversarial(test_loader, None, model, epoch_i, pgd_l2, device = device, stop = True, restarts = res)
     total_loss, total_acc_inf = epoch_adversarial(test_loader, None, model, epoch_i, pgd_linf, device = device, stop = True, restarts = res)
@@ -219,6 +241,8 @@ def test_pgd(model_name):
 
 
 def test_saver(model_name):
+    
+
     eps_1 = [3,6,9,12,20,30,50,60,70,80,90,100]
     eps_2 = [0.1,0.2,0.3,0.5,1.0,1.5,2.0,2.5,3,5,7,10]
     eps_3 = [0.05,0.1,0.15,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]
@@ -230,9 +254,11 @@ def test_saver(model_name):
     attacks_linf = torch.ones((batch_size, 12))*1000
     model = net().to(device)
     model_address = model_name + ".pt"
+    if path != None:
+        model_address = model_name + "/best.pt"
     model.load_state_dict(torch.load(model_address, map_location = device))
-    test_batches = DataLoader(mnist_test, batch_size = batch_size, shuffle=False)
     for index in range(len(eps_1)):
+            test_batches = DataLoader(mnist_test, batch_size = batch_size, shuffle=False)
             e_1 = eps_1[index]
             n_1 = num_1[index]
             eps, total_acc_1 = epoch_adversarial_saver(batch_size, test_batches, model, pgd_l1_topk, e_1, n_1, device = device, restarts = res)
@@ -241,6 +267,7 @@ def test_saver(model_name):
     np.save(model_name + "/" + "CPGDL1" + ".npy" ,attacks_l1.numpy())
 
     for index in range(len(eps_2)):        
+            test_batches = DataLoader(mnist_test, batch_size = batch_size, shuffle=False)
             e_2 = eps_2[index]
             n_2 = num_2[index]
             eps, total_acc_2 = epoch_adversarial_saver(batch_size, test_batches, model, pgd_l2, e_2, n_2, device = device, restarts = res)
@@ -249,6 +276,7 @@ def test_saver(model_name):
     np.save(model_name + "/" + "CPGDL2" + ".npy" ,attacks_l2.numpy())
 
     for index in range(len(eps_3)):
+            test_batches = DataLoader(mnist_test, batch_size = batch_size, shuffle=False)
             e_3 = eps_3[index]
             n_3 = num_3[index]
             eps, total_acc_3 = epoch_adversarial_saver(batch_size, test_batches, model, pgd_linf, e_3, n_3, device = device, restarts = res)
@@ -258,14 +286,28 @@ def test_saver(model_name):
 
 model_list = ["LINF", "L1", "L2", "MSD_V0", "TRIPLE", "WORST", "VANILLA"]
 model_name = "Selected/{}".format(model_list[choice])
+if path is not None:
+    model_name = path
 # model_name = "Final/TRIPLE/lr1_iter_20_kmap1"
 # model_name = "Final/MSD_V0/lr1_iter_20_kmap0_restartMSD"
 # model_name = "Models/PGD_all_topk/pgd_all_const_eps_k_rand_alph_inf_0_01_k_limit_20_16Aug_iter_14"
-# model_name = "Models/msd_iter_14"
+# model_name = "Models/mx`  sd_iter_14"
+
 
 if attack == 0:
-    test_foolbox(model_name, 1000)
+    test_foolbox(model_name, 100)
 elif attack == 1:
     test_pgd(model_name)
-else:
+elif attack == 2:
     test_saver(model_name)
+elif attack == 3:
+    test_pgd(model_name, clean = True)
+else:
+    print ("Test Summary")
+    from glob import glob
+    folder = "Final/MSD_V0"
+    files = glob(folder + "/lr4*/*.pt")
+    files += glob(folder + "/lr5*/*.pt")
+    # ipdb.set_trace()
+    for i in files:
+        test_pgd(i[:-3])

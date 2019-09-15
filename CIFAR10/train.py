@@ -75,7 +75,12 @@ attack_list = [ pgd_linf ,  pgd_l1_topk,   pgd_l2 ,  msd_v0 ,  triple_adv ,  pgd
 attack_name = ["pgd_linf", "pgd_l1_topk", "pgd_l2", "msd_v0", "triple_adv", "pgd_worst_dir", "vanilla"]
 folder_name = ["LINF", "L1", "L2", "MSD_V0", "TRIPLE", "WORST", "VANILLA"]
 
-file = open("Final/{0}/logs_lr_{1}.txt".format(folder_name[choice], str(lr_choice)), "w")
+model_dir = "Final2/{0}".format(folder_name[choice])
+import os
+if(not os.path.exists(model_dir)):
+    os.makedirs(model_dir)
+
+file = open("{0}/logs_lr_{1}.txt".format(model_dir, str(lr_choice)), "w")
 
 def myprint(a):
     print(a)
@@ -93,8 +98,10 @@ for epoch_i in range(1,epochs+1):
         train_loss, train_acc = epoch(train_batches, lr_schedule, model, epoch_i, criterion, opt = opt, device = device)
     elif choice == 4:
         train_loss, train_acc = triple_adv(train_batches, lr_schedule, model, epoch_i, attack, criterion, opt = opt, device = device, epsilon_l_2 = 0.3)
+    elif choice in [3,5]:
+        train_loss, train_acc = epoch_adversarial(train_batches, lr_schedule, model, epoch_i, attack, criterion, opt = opt, device = device, epsilon_l_2 = 0.3, alpha_l_inf = 0.005)
     else:
-        train_loss, train_acc = epoch_adversarial(train_batches, lr_schedule, model, epoch_i, attack, criterion, opt = opt, device = device, epsilon_l_2 = 0.3)
+        train_loss, train_acc = epoch_adversarial(train_batches, lr_schedule, model, epoch_i, attack, criterion, opt = opt, device = device)
 
     total_loss, total_acc   = epoch(test_batches, lr_schedule, model, epoch_i, criterion, opt = None, device = "cuda:1")
     total_loss, total_acc_1 = epoch_adversarial(test_batches, lr_schedule, model, epoch_i,  pgd_l1_topk, criterion, opt = None, device = device, stop = True)
@@ -102,4 +109,4 @@ for epoch_i in range(1,epochs+1):
     total_loss, total_acc_3 = epoch_adversarial(test_batches, lr_schedule, model, epoch_i,  pgd_linf, criterion, opt = None, device = device, stop = True)
     myprint('Epoch: {7}, Clean Acc: {6:.4f} Train Acc: {5:.4f}, Test Acc 1: {4:.4f}, Test Acc 2: {3:.4f}, Test Acc inf: {2:.4f}, Time: {1:.1f}, lr: {0:.4f}'.format(lr, time.time()-start_time, total_acc_3, total_acc_2,total_acc_1,train_acc, total_acc, epoch_i))    
     if epoch_i %5 == 0:
-        torch.save(model.state_dict(), "Final/{0}/lr{1}_iter_{2}_alphainf_0_005.pt".format(folder_name[choice], str(lr_choice), str(epoch_i)))
+        torch.save(model.state_dict(), "{0}/lr{1}_iter_{2}_a_inf_005.pt".format(model_dir, str(lr_choice), str(epoch_i)))
