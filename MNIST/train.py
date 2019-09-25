@@ -14,26 +14,16 @@ parser = argparse.ArgumentParser(description='Adversarial Training for MNIST', f
 parser.add_argument("-gpu_id", help="Id of GPU to be used", type=int, default = 0)
 parser.add_argument("-model", help="Type of Adversarial Training: \n\t 0: l_inf \n\t 1: l_1 \n\t 2: l_2 \n\t 3: msd \n\t 4: triple \n\t 5: worst \n\t 6: vanilla", type=int, default = 3)
 parser.add_argument("-batch_size", help = "Batch Size for Train Set (Default = 100)", type = int, default = 100)
-parser.add_argument("-lr_schedule", help = "Choice (see code) 1 or 2", type = int, default = 1)
-parser.add_argument("-k_map", help = "Choice for L1 attacks", type = int, default = 0)
-parser.add_argument("-epsilon_l_1", help = "Epsilon for L1 attacks", type = float, default = 12)
-parser.add_argument("-epsilon_l_2", help = "Epsilon for L2 attacks", type = float, default = 1.5)
-parser.add_argument("-epsilon_l_inf", help = "Epsilon for Linf attacks", type = float, default = 0.3)
 parser.add_argument("-alpha_l_1", help = "Step Size for L1 attacks", type = float, default = 0.05)
 parser.add_argument("-alpha_l_2", help = "Step Size for L2 attacks", type = float, default = 0.1)
 parser.add_argument("-alpha_l_inf", help = "Step Size for Linf attacks", type = float, default = 0.01)
 parser.add_argument("-num_iter", help = "PGD iterations", type = int, default = 100)
-parser.add_argument("-epochs", help = "PGD iterations", type = int, default = 15)
+parser.add_argument("-epochs", help = "Number of Epochs", type = int, default = 20)
 
 params = parser.parse_args()
 device_id = params.gpu_id
 batch_size = params.batch_size
 choice = params.model
-lr_choice = params.lr_schedule
-k_map = params.k_map
-epsilon_l_1 = params.epsilon_l_1
-epsilon_l_2 = params.epsilon_l_2
-epsilon_l_inf = params.epsilon_l_inf
 alpha_l_1 = params.alpha_l_1
 alpha_l_2 = params.alpha_l_2
 alpha_l_inf = params.alpha_l_inf
@@ -76,23 +66,26 @@ criterion = nn.CrossEntropyLoss()
 
 #### TRAIN CODE #####
 
-model_dir = "Final/{0}/lr{1}_kmap{2}_e1_{3}_e2_{4}_a1_{5}_a2_{6}_ainf_{7}_b{8}_epochs{9}".format(folder_name[choice], str(lr_choice), k_map, str(epsilon_l_1), str(epsilon_l_2), str(alpha_l_1), str(alpha_l_2), str(alpha_l_inf), str(batch_size), str(epochs))
+model_dir = "Final/{0}/final_a1_{1}_a2_{2}_ainf_{3}_b{4}_epochs{5}".format(folder_name[choice], str(alpha_l_1), str(alpha_l_2), str(alpha_l_inf), str(batch_size), str(epochs))
 
 import os
 if(not os.path.exists(model_dir)):
     os.makedirs(model_dir)
 file = open("{0}/logs.txt".format(model_dir), "a")
 
-if lr_choice == 1:
+if folder in ["LINF", "L1", "L2", "WORST", "VANILLA"]:
     lr_schedule = lambda t: np.interp([t], [0, 3, 10, epochs], [0, 0.05, 0.001, 0.0001])[0]
-elif lr_choice == 2:
+    k_map = 0
+elif folder in ["TRIPLE"]:
     lr_schedule = lambda t: np.interp([t], [0, 3, 10, epochs], [0, 0.01, 0.001, 0.00001])[0]
-elif lr_choice == 3:
-    lr_schedule = lambda t: np.interp([t], [0, 5, 10, epochs], [0, 0.01, 0.001, 0.0001])[0]
-elif lr_choice == 4:
-    lr_schedule = lambda t: np.interp([t], [0, 5, 10, epochs], [0, 0.1, 0.01, 0])[0]
+    k_map = 0
+elif folder == "MSD_V0":
+    lr_schedule = lambda t: np.interp([t], [0, 3, 7, 15], [0.0, 0.05, 0.1, 0.001])[0]
+    k_map = 1
 else:
-    lr_schedule = lambda t: np.interp([t], [0, 5, 10, epochs], [0, 0.01, 0.001, 0])[0]
+    lr_schedule = lambda t: np.interp([t], [0, 7, 15, epochs], [0.0, 0.1, 0.001,0.0001])[0]
+    k_map = 0
+
 # lr_schedule = lambda t: np.interp([t], [0, 3, 7, 15], [0, 0.05, 0.001, 0.0001])[0]
 model = net().to(device)
 opt = optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
@@ -107,8 +100,7 @@ for t in range(1,epochs+1):
         train_loss, train_acc = triple_adv(train_loader, lr_schedule, model, epoch_i = t, attack = attack, opt = opt, device = device, k_map = k_map)
     elif choice in [3,5]:
         train_loss, train_acc = epoch_adversarial(train_loader, lr_schedule, model, epoch_i = t, attack = attack, 
-                                                        opt = opt, device = device, k_map = k_map,
-                                                        epsilon_l_inf = epsilon_l_inf, epsilon_l_2= epsilon_l_2, epsilon_l_1 = epsilon_l_1, 
+                                                        opt = opt, device = device, k_map = k_map, 
                                                         alpha_l_inf = alpha_l_inf, alpha_l_2 = alpha_l_2, alpha_l_1 = alpha_l_1, 
                                                         num_iter = num_iter)
     elif choice == 1:
@@ -123,7 +115,7 @@ for t in range(1,epochs+1):
 
     myprint('Epoch: {0}, Train Acc: {1:.4f} Clean Acc: {2:.4f}, Test Acc 1: {3:.4f}, Test Acc 2: {4:.4f}, Test Acc inf: {5:.4f}, Time: {6:.1f}, lr: {7:.4f}'.format(t, train_acc,test_acc, l1_acc_topk, l2_acc, linf_acc, time.time() - start, lr_schedule(t)))    
     
-    if t %5 == 0:
+    if t %5 == 0 or t==epochs:
         torch.save(model.state_dict(), "{0}/iter_{1}.pt".format(model_dir, str(t)))
 
 
