@@ -1,6 +1,6 @@
 # Adversarial Robustness Against the Union of Multiple Perturbation Models
 
-Repository for the paper [Adversarial Robustness Against the Union of Multiple Perturbation Models](https://arxiv.org/abs/1909.04068) by [Pratyush Maini](https://github.com/pratyush911), [Eric Wong](https://riceric22.github.io) and [Zico Kolter](http://zicokolter.com)
+Repository for the paper [Adversarial Robustness Against the Union of Multiple Perturbation Models](https://arxiv.org/abs/1909.04068) by [Pratyush Maini](https://pratyush911.github.io), [Eric Wong](https://riceric22.github.io) and [Zico Kolter](http://zicokolter.com)
 
 ## What is robustness against a union of multiple perturbation models?
 While there has been a significant body of work that has focussed on creating classifiers that are robust to adversarial perturbations within a specified ℓp ball, the majority of defences have been restricted to a particular norm. In this work we focus on developing models that are robust against multiple ℓp balls simultaneously, namely ℓ∞, ℓ2, and ℓ1 balls.
