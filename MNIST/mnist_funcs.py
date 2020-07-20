@@ -1,8 +1,8 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib.colors import LightSource
+# import matplotlib.pyplot as plt
+# import matplotlib
+# from mpl_toolkits.mplot3d import Axes3D
+# from matplotlib.colors import LightSource
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -26,21 +26,31 @@ def norms(Z):
 def norms_l2(Z):
     return norms(Z)
 
+def norms_l2_squeezed(Z):
+    return norms(Z).squeeze(1).squeeze(1).squeeze(1)
+
 def norms_l1(Z):
     return Z.view(Z.shape[0], -1).abs().sum(dim=1)[:,None,None,None]
 
+def norms_l1_squeezed(Z):
+    return Z.view(Z.shape[0], -1).abs().sum(dim=1)[:,None,None,None].squeeze(1).squeeze(1).squeeze(1)
+
 def norms_l0(Z):
     return ((Z.view(Z.shape[0], -1)!=0).sum(dim=1)[:,None,None,None]).float()
+
+def norms_l0_squeezed(Z):
+    return ((Z.view(Z.shape[0], -1)!=0).sum(dim=1)[:,None,None,None]).float().squeeze(1).squeeze(1).squeeze(1)
 
 def norms_linf(Z):
     return Z.view(Z.shape[0], -1).abs().max(dim=1)[0]
 
 
-def pgd_worst_dir(model, X,y, epsilon_l_inf = 0.3, epsilon_l_2= 1.5, epsilon_l_1 = 12, 
-                                alpha_l_inf = 0.01, alpha_l_2 = 0.1, alpha_l_1 = 0.05, num_iter = 100, device = "cuda:1", k_map = 0):
-    delta_1 = pgd_l1_topk(model, X, y, epsilon = epsilon_l_1, alpha = alpha_l_1, num_iter = 100, device = device, k_map = k_map)
-    delta_2 = pgd_l2(model, X, y, epsilon = epsilon_l_2, alpha = alpha_l_2, num_iter = 100, device = device)
-    delta_inf = pgd_linf(model, X, y, epsilon = epsilon_l_inf, alpha = alpha_l_inf, num_iter = 50, device = device, restarts = 2)
+#MAX MODE
+def pgd_worst_dir(model, X,y, epsilon_l_inf = 0.3, epsilon_l_2= 2.0, epsilon_l_1 = 10, 
+                                alpha_l_inf = 0.01, alpha_l_2 = 0.1, alpha_l_1 = 1.0, num_iter = 100, device = "cuda:1", k_map = 0, randomize = 0):
+    delta_1 = pgd_l1_topk(model, X, y, epsilon = epsilon_l_1, alpha = alpha_l_1, num_iter = 100, device = device, randomize = randomize)
+    delta_2 = pgd_l2(model, X, y, epsilon = epsilon_l_2, alpha = alpha_l_2, num_iter = 100, device = device, randomize = randomize)
+    delta_inf = pgd_linf(model, X, y, epsilon = epsilon_l_inf, alpha = alpha_l_inf, num_iter = 50, device = device, randomize = randomize)
     
     batch_size = X.shape[0]
 
@@ -65,48 +75,70 @@ def pgd_worst_dir(model, X,y, epsilon_l_inf = 0.3, epsilon_l_2= 1.5, epsilon_l_1
     return delta
 
 
-def msd_v0(model, X,y, epsilon_l_inf = 0.3, epsilon_l_2= 1.5, epsilon_l_1 = 12, 
-                        alpha_l_inf = 0.01, alpha_l_2 = 0.2, alpha_l_1 = 0.05, 
-                        num_iter = 100, device = "cuda:1", k_map = 0):
+
+def msd_v0(model, X,y, epsilon_l_inf = 0.3, epsilon_l_2= 2.0, epsilon_l_1 = 10, alpha_l_inf = 0.01, alpha_l_2 = 0.1, alpha_l_1 = 1.0, num_iter = 100, device = "cuda:1", k_map = 0, msd_init = 1, l1_approx = 0, smallest_adv = 0, randomize = 0):
+    # ipdb.set_trace()
     alpha_l_1_default = alpha_l_1
     max_max_delta = torch.zeros_like(X)
     max_max_loss = torch.zeros(y.shape[0]).to(y.device)
-    for j in range(1):
+    #msd_init is an initialization metric
+    # low = 0 if msd_init in [0,2] else 1
+    low = 0 if not randomize else 1
+    high = 1 if not randomize else 2
+    # high = 1 if msd_init in [0] else 2
+    select = []
+    for j in range(low, high):
         # ipdb.set_trace()
         if j==0:
             delta = torch.zeros_like(X,requires_grad = True)
         else:
             delta = torch.rand_like(X,requires_grad = True) 
-            delta.data = 2*delta.data - 1
+            with torch.no_grad():
+                delta.data = 2*delta.data*epsilon_l_inf - epsilon_l_inf
+                delta.data *= epsilon_l_2 / norms(delta).clamp(min=epsilon_l_2)
+                delta.data *= epsilon_l_1 / norms_l1(delta).clamp(min=epsilon_l_1)
+
+
         max_delta = torch.zeros_like(X)
         max_loss = torch.zeros(y.shape[0]).to(y.device)
+
         for t in range(num_iter):
             loss = nn.CrossEntropyLoss()(model(X + delta), y)
             loss.backward()
-            with torch.no_grad():                
+            with torch.no_grad():
+                if not smallest_adv:
+                    correct = 1
+                else:
+                    output = model(X+delta)
+                    incorrect = output.max(1)[1] != y 
+                    correct = (~incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).float()                
                 #For L_2
-                delta_l_2  = delta.data + alpha_l_2*delta.grad / norms(delta.grad)      
+
+                delta_l_2  = delta.data + correct*alpha_l_2*delta.grad / norms(delta.grad.clone())      
                 delta_l_2  = torch.min(torch.max(delta_l_2, -X), 1-X) # clip X+delta to [0,1]
                 delta_l_2 *= epsilon_l_2 / norms(delta_l_2).clamp(min=epsilon_l_2)
 
                 #For L_inf
-                delta_l_inf =  (delta.data + alpha_l_inf*delta.grad.sign()).clamp(-epsilon_l_inf,epsilon_l_inf)
+                delta_l_inf =  (delta.data + correct*alpha_l_inf*delta.grad.clone().sign()).clamp(-epsilon_l_inf,epsilon_l_inf)
                 delta_l_inf = torch.min(torch.max(delta_l_inf, -X), 1-X) # clip X+delta to [0,1]
 
                 #For L1
                 if k_map == 0:
                     k = random.randint(5,20)
-                    alpha_l_1   = (alpha_l_1_default/k)*20
+                    alpha_l_1   = (alpha_l_1_default/k)
                 elif k_map == 1:
                     k = random.randint(5,40)
-                    alpha_l_1   = (alpha_l_1_default/k)*20
+                    alpha_l_1   = (alpha_l_1_default/k)
                 else:
                     k = 10
-                    alpha_l_1 = alpha_l_1_default
+                    alpha_l_1 = (alpha_l_1_default/k)
 
-                delta_l_1   = delta.data + alpha_l_1*l1_dir_topk(delta.grad, delta.data, X, alpha_l_1, k=k)
-                delta_l_1   = proj_l1ball(delta_l_1, epsilon_l_1, device)
+                delta_l_1   = delta.data + correct*alpha_l_1*l1_dir_topk(delta.grad.clone(), delta.data, X, alpha_l_1, k=k)                
                 delta_l_1   = torch.min(torch.max(delta_l_1, -X), 1-X) # clip X+delta to [0,1]
+                if l1_approx == 0:
+                    delta_l_1   = proj_l1ball(delta_l_1, epsilon_l_1, device)
+                else:
+                    delta_l_1 *= epsilon_l_1 / norms_l1(delta_l_1).clamp(min=epsilon_l_1)
                 
                 #Compare
                 delta_tup = (delta_l_inf, delta_l_1, delta_l_2)
@@ -120,22 +152,35 @@ def msd_v0(model, X,y, epsilon_l_inf = 0.3, epsilon_l_2= 1.5, epsilon_l_1 = 12,
                 delta.data = max_delta.data
                 max_max_delta[max_loss> max_max_loss] = max_delta[max_loss> max_max_loss]
                 max_max_loss[max_loss> max_max_loss] = max_loss[max_loss> max_max_loss]
+                select.append(selection_stats)
             # ipdb.set_trace()
             # selection_stats_final = (selection_stats_final*(t-1) + selection_stats)/t
             delta.grad.zero_()
         del delta
-
+    # ipdb.set_trace()
+    # select1 = [x.unsqueeze(0) for x in select]
+    # kk =  torch.cat(select1, dim = 0)
+    # var = kk.std(dim = 0)
+    # var2 = kk[10:].std(dim = 0)
+    # print(var[var!=0].shape, var2[var2!=0].shape)
     return max_max_delta
 
 
-def pgd_linf(model, X, y, epsilon=0.3, alpha=0.01, num_iter = 100, restarts = 0, device = "cuda:1"):
+
+def pgd_linf(model, X, y, epsilon=0.3, alpha=0.01, num_iter = 50, randomize = 0, restarts = 0, device = "cuda:1"):
     """ Construct FGSM adversarial examples on the examples X"""
+    # ipdb.set_trace()
+   
     max_delta = torch.zeros_like(X)
-    delta = torch.zeros_like(X, requires_grad=True)    
+    if randomize:
+        delta = torch.rand_like(X, requires_grad=True)
+        delta.data = (delta.data * 2.0 - 1.0) * epsilon
+    else:
+        delta = torch.zeros_like(X, requires_grad=True)    
     for t in range(num_iter):
         output = model(X+delta)
         incorrect = output.max(1)[1] != y 
-        correct = (1-incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).float()
+        correct = (~incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).float()
         #Finding the correct examples so as to attack only them
         loss = nn.CrossEntropyLoss()(model(X + delta), y)
         loss.backward()
@@ -151,7 +196,7 @@ def pgd_linf(model, X, y, epsilon=0.3, alpha=0.01, num_iter = 100, restarts = 0,
         for t in range(num_iter):
             output = model(X+delta)
             incorrect = output.max(1)[1] != y 
-            correct = (1-incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).float()
+            correct = (~incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).float()
             #Finding the correct examples so as to attack only them            
             loss = nn.CrossEntropyLoss()(model(X + delta), y)
             loss.backward()
@@ -167,13 +212,19 @@ def pgd_linf(model, X, y, epsilon=0.3, alpha=0.01, num_iter = 100, restarts = 0,
 
 
 
-def pgd_l2(model, X, y, epsilon=1.5, alpha=0.1, num_iter = 100, restarts = 0, device = "cuda:1"):
+def pgd_l2(model, X, y, epsilon=2.0, alpha=0.1, num_iter = 100, restarts = 0, device = "cuda:1", randomize = 0):
+    # ipdb.set_trace()
     max_delta = torch.zeros_like(X)
-    delta = torch.zeros_like(X, requires_grad = True)
+    if random:
+        delta = torch.rand_like(X, requires_grad=True) 
+        delta.data *= (2.0*delta.data - 1.0)
+        delta.data = delta.data*epsilon/norms_l2(delta.detach()) 
+    else:
+        delta = torch.zeros_like(X, requires_grad=True) 
     for t in range(num_iter):
         output = model(X+delta)
         incorrect = output.max(1)[1] != y 
-        correct = (1-incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).float()
+        correct = (~incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).float()
         #Finding the correct examples so as to attack only them
         loss = nn.CrossEntropyLoss()(model(X + delta), y)
         loss.backward()
@@ -193,7 +244,7 @@ def pgd_l2(model, X, y, epsilon=1.5, alpha=0.1, num_iter = 100, restarts = 0, de
         for t in range(num_iter):
             output = model(X+delta)
             incorrect = output.max(1)[1] != y 
-            correct = (1-incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).float()
+            correct = (~incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).float()
             #Finding the correct examples so as to attack only them
             loss = nn.CrossEntropyLoss()(model(X + delta), y)
             loss.backward()
@@ -209,7 +260,7 @@ def pgd_l2(model, X, y, epsilon=1.5, alpha=0.1, num_iter = 100, restarts = 0, de
 
     return max_delta    
 
-def pgd_l0(model, X,y, epsilon = 12, alpha = 0.5, num_iter = 100, device = "cuda:1"):
+def pgd_l0(model, X,y, epsilon = 10, alpha = 0.5, num_iter = 100, device = "cuda:1"):
     delta = torch.zeros_like(X, requires_grad = True)
     batch_size = X.shape[0]
     for t in range (epsilon):
@@ -242,26 +293,32 @@ def pgd_l0(model, X,y, epsilon = 12, alpha = 0.5, num_iter = 100, device = "cuda
     return delta.detach()
 
 
-def pgd_l1_topk(model, X,y, epsilon = 12, alpha = 0.05, num_iter = 50, k_map = 0, device = "cuda:1", restarts = 1):
+def pgd_l1_topk(model, X,y, epsilon = 10, alpha = 1.0, num_iter = 50, k_map = 0, gap = 0.05, device = "cuda:1", restarts = 0, randomize = 0):
     #Gap : Dont attack pixels closer than the gap value to 0 or 1
-    gap = alpha
+    # ipdb.set_trace()
+    gap = gap
     max_delta = torch.zeros_like(X)
-    delta = torch.zeros_like(X, requires_grad = True)
+    if randomize:
+        delta = torch.from_numpy(np.random.laplace(size=X.shape)).float().to(device)
+        delta.data = delta.data*epsilon/norms_l1(delta.detach())
+        delta.requires_grad = True
+    else:
+        delta = torch.zeros_like(X, requires_grad = True)
     alpha_l_1_default = alpha
 
     for t in range (num_iter):
         output = model(X+delta)
         incorrect = output.max(1)[1] != y 
-        correct = (1-incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).float()
+        correct = (~incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).float()
         #Finding the correct examples so as to attack only them
         loss = nn.CrossEntropyLoss()(model(X+delta), y)
         loss.backward()
         if k_map == 0:
             k = random.randint(5,20)
-            alpha   = (alpha_l_1_default/k)*20
+            alpha   = (alpha_l_1_default/k)
         elif k_map == 1:
             k = random.randint(10,40)
-            alpha   = (alpha_l_1_default/k)*40
+            alpha   = (alpha_l_1_default/k)
         else:
             k = 10
             alpha = alpha_l_1_default
@@ -276,23 +333,23 @@ def pgd_l1_topk(model, X,y, epsilon = 12, alpha = 0.05, num_iter = 50, k_map = 0
     #Restarts    
     for k in range(restarts):
         delta = torch.rand_like(X,requires_grad = True)
-        delta.data = (2*delta.data - 1.0)*epsilon 
-        delta.data /= norms_l1(delta.detach()).clamp(min=epsilon)
+        delta.data = (2*delta.data - 1.0)
+        delta.data = delta.data*epsilon/norms_l1(delta.detach())
         for t in range (num_iter):
             output = model(X+delta)
             incorrect = output.max(1)[1] != y 
-            correct = (1-incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).float()
+            correct = (~incorrect).unsqueeze(1).unsqueeze(1).unsqueeze(1).float()
             #Finding the correct examples so as to attack only them
             loss = nn.CrossEntropyLoss()(model(X+delta), y)
             loss.backward()
             if k_map == 0:
                 k = random.randint(5,20)
-                alpha   = (alpha_l_1_default/k)*20
+                alpha   = (alpha_l_1_default/k)
             elif k_map == 1:
                 k = random.randint(10,40)
-                alpha   = (alpha_l_1_default/k)*40
+                alpha   = (alpha_l_1_default/k)
             else:
-                k = 20
+                k = 10
                 alpha = alpha_l_1_default
             delta.data += alpha*correct*l1_dir_topk(delta.grad.detach(), delta.data, X, gap,k)
             if (norms_l1(delta) > epsilon).any():
@@ -310,7 +367,7 @@ def kthlargest(tensor, k, dim=-1):
     val, idx = tensor.topk(k, dim = dim)
     return val[:,:,-1], idx[:,:,-1]
 
-def l1_dir_topk(grad, delta, X, gap, k = 50) :
+def l1_dir_topk(grad, delta, X, gap, k = 10) :
     #Check which all directions can still be increased such that
     #they haven't been clipped already and have scope of increasing
     # ipdb.set_trace()
@@ -472,9 +529,14 @@ def epoch_adversarial_saver(batch_size, loader, model, attack, epsilon, num_iter
         break
     return eps,  train_acc / train_n
 
-
+#AVG MODE
 def triple_adv(loader, lr_schedule, model, epoch_i, attack, criterion = nn.CrossEntropyLoss(), 
-                    opt=None, device= "cuda:1", epsilon_l_1 = 12, epsilon_l_2 = 1.5, epsilon_l_inf = 0.3, num_iter = 100, k_map = 0):
+                    opt=None, device= "cuda:1", 
+                    epsilon_l_inf = 0.3, epsilon_l_2= 2.0, epsilon_l_1 = 10, 
+                    alpha_l_inf = 0.01, alpha_l_2 = 0.1, alpha_l_1 = 1.0, num_iter = 100, 
+                    k_map = 0, randomize = 0):
+    
+
     train_loss = 0
     train_acc = 0
     train_n = 0
@@ -486,45 +548,24 @@ def triple_adv(loader, lr_schedule, model, epoch_i, attack, criterion = nn.Cross
 
         X,y = X.to(device), y.to(device)
         #L1
-        delta = pgd_l1_topk(model, X, y, device = device, epsilon = epsilon_l_1, k_map = k_map)
-        yp = model(X+delta)
-        loss = nn.CrossEntropyLoss()(yp,y)
-        if opt:
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-        
-        train_loss += loss.item()*y.size(0)
-        train_acc += (yp.max(1)[1] == y).sum().item()
-        train_n += y.size(0)
-        
-
-
+        delta_l_1 = pgd_l1_topk(model, X, y, device = device, epsilon = epsilon_l_1, k_map = k_map, alpha = alpha_l_1, randomize = randomize)
+        yp_l_1 = model(X+delta_l_1)
         #L2
-        delta = pgd_l2(model, X, y, device = device, epsilon = epsilon_l_2)
-        yp = model(X+delta)
-        loss = nn.CrossEntropyLoss()(yp,y)
-        if opt:
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-        
-        train_loss += loss.item()*y.size(0)
-        train_acc += (yp.max(1)[1] == y).sum().item()
-        train_n += y.size(0)
-
-        
+        delta_l_2 = pgd_l2(model, X, y, device = device, epsilon = epsilon_l_2, alpha = alpha_l_2, randomize = randomize)
+        yp_l_2 = model(X+delta_l_2)
         #Linf
-        delta = pgd_linf(model, X, y, device = device, epsilon = epsilon_l_inf)
-        yp = model(X+delta)
-        loss = nn.CrossEntropyLoss()(yp,y)
+        delta_l_inf = pgd_linf(model, X, y, device = device, epsilon = epsilon_l_inf, alpha = alpha_l_inf, randomize = randomize)
+        yp_l_inf = model(X+delta_l_inf)
+        y_full = torch.cat([y,y,y], dim = 0)
+        yp_full = torch.cat([yp_l_1,yp_l_2,yp_l_inf], dim = 0)
+        loss = nn.CrossEntropyLoss()(yp_full,y_full)
         if opt:
             opt.zero_grad()
             loss.backward()
             opt.step()
         
-        train_loss += loss.item()*y.size(0)
-        train_acc += (yp.max(1)[1] == y).sum().item()
-        train_n += y.size(0)
-        # break
+        train_loss += loss.item()*(y_full.size(0))
+        train_acc += (yp_full.max(1)[1] == y_full).sum().item()
+        train_n += y_full.size(0)
+
     return train_loss / train_n, train_acc / train_n
