@@ -44,4 +44,16 @@ The repository is written using `python 3.6`. To install dependencies run the co
 | **ℓ1 attacks (ϵ=12)**   |16.0\% | 46.6\% | 7.9\% | 39.4\% | 54.0\% | 53.4\% |
 | **All Attacks**         |15.6\% | 27.5\% | 0.0\% | 34.9\% | 40.6\% | **46.1\%**  |
 
-**Note:** All attacks are performed with 10 random restarts on the first 1000 test examples.
+**Note:** All attacks are performed with 10 random restarts on the first 1000 test examples.   
+
+
+## How can I cite this work?
+```
+@inproceedings{maini2020adversarial,
+	title={Adversarial Robustness Against the Union of Multiple Perturbation Models}, 
+	author={Pratyush Maini and Eric Wong and J. Zico Kolter},
+	booktitle={International Conference on Machine Learning},
+	year={2020},
+	url = "https://arxiv.org/abs/1909.04068"
+}
+```
