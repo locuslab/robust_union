@@ -3,7 +3,7 @@ matplotlib==2.0.0
 foolbox==1.8.0
 ipdb==0.12
 pandas==0.24.2
-numpy==1.16.2
+numpy==1.22.0
 torchvision==0.2.1
 torch==1.0.0
 pydot==1.4.1
